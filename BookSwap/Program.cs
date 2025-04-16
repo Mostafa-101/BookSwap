@@ -12,7 +12,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add DbContext
-builder.Services.AddDbContext<BookSwapDbContext>(op => op.UseSqlServer(builder.Configuration.GetConnectionString("nahrawcon")));
+builder.Services.AddDbContext<BookSwapDbContext>(op => op.UseSqlServer(builder.Configuration.GetConnectionString("MyCon")));
 
 // Add JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

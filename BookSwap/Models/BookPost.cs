@@ -31,8 +31,6 @@ namespace BookSwap.Models
         [Required]
         public DateTime PublicationDate { get; set; }
 
-        [Required]
-        public bool IsAvailable { get; set; }
 
         [Required]
         public DateTime StartDate { get; set; }

@@ -4,6 +4,7 @@ using BookSwap.Data.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BookSwap.Migrations
 {
     [DbContext(typeof(BookSwapDbContext))]
-    partial class BookSwapDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250416202302_Start8")]
+    partial class Start8
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -335,7 +338,7 @@ namespace BookSwap.Migrations
             modelBuilder.Entity("BookSwap.Models.Reply", b =>
                 {
                     b.HasOne("BookSwap.Models.Comment", "Comment")
-                        .WithMany("Replies")
+                        .WithMany()
                         .HasForeignKey("CommentID")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -363,11 +366,6 @@ namespace BookSwap.Migrations
                     b.Navigation("Comments");
 
                     b.Navigation("Likes");
-                });
-
-            modelBuilder.Entity("BookSwap.Models.Comment", b =>
-                {
-                    b.Navigation("Replies");
                 });
 
             modelBuilder.Entity("BookSwap.Models.Reader", b =>

@@ -122,35 +122,68 @@ public class AdminController : ControllerBase
 
         return Ok(pendingBookOwners);
     }
-
-    [HttpPut("ApproveBookOwner/{id}")]
-    public async Task<IActionResult> ApproveBookOwner(int id)
+    [HttpPut("ProcessBookOwner/{id}")]
+    public async Task<IActionResult> ProcessBookOwner(int id, [FromQuery] string action)
     {
         var bookOwner = await _context.BookOwners.FindAsync(id);
         if (bookOwner == null) return NotFound("Book Owner not found.");
         if (bookOwner.RequestStatus != "Pending") return BadRequest("Book Owner request is already processed.");
 
-        bookOwner.RequestStatus = "Approved";
+        if (action.ToLower() == "approve")
+        {
+            bookOwner.RequestStatus = "Approved";
+        }
+        else if (action.ToLower() == "reject")
+        {
+            bookOwner.RequestStatus = "Rejected";
+        }
+        else
+        {
+            return BadRequest("Invalid action. Use 'approve' or 'reject'.");
+        }
+
         _context.Entry(bookOwner).State = EntityState.Modified;
         await _context.SaveChangesAsync();
 
-        return Ok("Book Owner approved.");
+        return Ok($"Book Owner {action}d.");
     }
-
-    [HttpPut("RejectBookOwner/{id}")]
-    public async Task<IActionResult> RejectBookOwner(int id)
+    [HttpGet("ManageBookPosts")]
+    public async Task<ActionResult<IEnumerable<BookPost>>> GetPendingBookPosts()
     {
-        var bookOwner = await _context.BookOwners.FindAsync(id);
-        if (bookOwner == null) return NotFound("Book Owner not found.");
-        if (bookOwner.RequestStatus != "Pending") return BadRequest("Book Owner request is already processed.");
+        var pendingBookPosts = await _context.BookPosts
+            .Where(b => b.PostStatus == "Pending")
+            .ToListAsync();
 
-        bookOwner.RequestStatus = "Rejected";
-        _context.Entry(bookOwner).State = EntityState.Modified;
+        if (pendingBookPosts == null || !pendingBookPosts.Any())
+            return NotFound("No pending Book Posts.");
+
+        return Ok(pendingBookPosts);
+    }
+    [HttpPut("ProcessBookPosts/{id}")]
+    public async Task<IActionResult> ProcessBookPosts(int id, [FromQuery] string action)
+    {
+        var BookPost = await _context.BookPosts.FindAsync(id);
+        if (BookPost == null) return NotFound("Book Post not found.");
+        if (BookPost.PostStatus != "Pending") return BadRequest("Book Post request is already processed.");
+
+        if (action.ToLower() == "approve")
+        {
+            BookPost.PostStatus = "Available";
+        }
+        else if (action.ToLower() == "reject")
+        {
+            BookPost.PostStatus = "Rejected";
+        }
+        else
+        {
+            return BadRequest("Invalid action. Use 'approve' or 'reject'.");
+        }
+
+        _context.Entry(BookPost).State = EntityState.Modified;
         await _context.SaveChangesAsync();
 
-        return Ok("Book Owner rejected.");
+        return Ok($"Book Post {action}d.");
     }
-
     // -------------------- Helpers --------------------
 
     private string HashPassword(string password)
