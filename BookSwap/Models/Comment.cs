@@ -23,8 +23,8 @@ namespace BookSwap.Models
 
 
         public string Content { get; set; }
-        public Reader Reader { get; set; }
-        public BookPost BookPost { get; set; }
+        public Reader? Reader { get; set; }
+        public BookPost? BookPost { get; set; }
 
     }
 }

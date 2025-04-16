@@ -20,7 +20,7 @@ namespace BookSwap.Models
 
         public bool IsLike { get; set; }
 
-        public Reader Reader { get; set; }
-        public BookPost BookPost { get; set; }
+        public Reader? Reader { get; set; }
+        public BookPost? BookPost { get; set; }
     }
 }

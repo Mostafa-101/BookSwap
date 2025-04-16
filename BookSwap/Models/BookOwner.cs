@@ -7,29 +7,26 @@ namespace BookSwap.Models
     {
         [Key]
         [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
-        [Required]
-
         public int BookOwnerID { get; set; }
-        [Required]
 
+        [Required]
         public string BookOwnerName { get; set; }
-        [Required]
 
+        [Required]
         public string Password { get; set; }
-        [Required]
 
+        [Required]
         public int ssn { get; set; }
-        [Required]
 
+        [Required]
         public string RequestStatus { get; set; }
-        [Required]
 
+        [Required]
         public string Email { get; set; }
 
         [Required]
-
         public string PhoneNumber { get; set; }
-        public List<BookPost> BookPosts { get; set; }
 
+        public List<BookPost> BookPosts { get; set; } = new();
     }
 }

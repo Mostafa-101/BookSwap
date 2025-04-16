@@ -24,8 +24,8 @@ namespace BookSwap.Models
         [Required]
 
         public string RequsetStatus { get; set; }
-        public BookPost BookPost { get; set; }
-        public Reader Reader { get; set; }
+        public BookPost? BookPost { get; set; }
+        public Reader? Reader { get; set; }
 
 
     }

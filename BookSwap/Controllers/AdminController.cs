@@ -1,13 +1,16 @@
 ﻿using BookSwap.Data.Contexts;
 using BookSwap.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Cryptography;
 using System.Text;
+
 [ApiController]
 [Route("api/admin")]
+//[Authorize(Roles = "Admin")]
 public class AdminController : ControllerBase
 {
     private readonly BookSwapDbContext _context;
@@ -16,34 +19,30 @@ public class AdminController : ControllerBase
     public AdminController(BookSwapDbContext context, IConfiguration configuration)
     {
         _context = context;
-        _secretKey = configuration["Jwt:Key"]; // المفتاح السري من appsettings.json
+        _secretKey = configuration["Jwt:Key"];
     }
 
-    // POST: api/admin/signup
+    // -------------------- Auth Operations --------------------
+
+    [AllowAnonymous]
     [HttpPost("signup")]
     public async Task<IActionResult> SignUp([FromBody] Admin admin)
     {
-        var existingAdmin = await _context.Admins
-            .FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
+        var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
+        if (existingAdmin != null) return BadRequest("Admin already exists.");
 
-        if (existingAdmin != null)
-            return BadRequest("Admin already exists.");
-
-        admin.PasswordHash = HashPassword(admin.PasswordHash); // هاش للباسورد
-
+        admin.PasswordHash = HashPassword(admin.PasswordHash);
         _context.Admins.Add(admin);
         await _context.SaveChangesAsync();
 
         return Ok("Admin registered successfully.");
     }
 
-    // POST: api/admin/login
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] Admin admin)
     {
-        var existingAdmin = await _context.Admins
-            .FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
-
+        var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
         if (existingAdmin == null || !VerifyPassword(admin.PasswordHash, existingAdmin.PasswordHash))
             return Unauthorized(new { message = "Invalid credentials." });
 
@@ -54,7 +53,8 @@ public class AdminController : ControllerBase
         {
             Subject = new System.Security.Claims.ClaimsIdentity(new[]
             {
-                new System.Security.Claims.Claim("name", existingAdmin.AdminName)
+                new System.Security.Claims.Claim("name", existingAdmin.AdminName),
+                new System.Security.Claims.Claim("role", "Admin")
             }),
             Expires = DateTime.UtcNow.AddHours(1),
             SigningCredentials = new SigningCredentials(
@@ -68,52 +68,39 @@ public class AdminController : ControllerBase
         return Ok(new { Token = tokenString });
     }
 
-    // GET: api/admin/{adminName}
+    // -------------------- Admin CRUD --------------------
+
     [HttpGet("{adminName}")]
     public async Task<IActionResult> GetAdmin(string adminName)
     {
-        var admin = await _context.Admins
-            .FirstOrDefaultAsync(a => a.AdminName == adminName);
-
-        if (admin == null)
-            return NotFound("Admin not found.");
-
+        var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
+        if (admin == null) return NotFound("Admin not found.");
         return Ok(admin);
     }
 
-    // PUT: api/admin/{adminName}
     [HttpPut("{adminName}")]
     public async Task<IActionResult> UpdateAdmin(string adminName, [FromBody] Admin updatedAdmin)
     {
-        var existingAdmin = await _context.Admins
-            .FirstOrDefaultAsync(a => a.AdminName == adminName);
+        var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
+        if (existingAdmin == null) return NotFound("Admin not found.");
 
-        if (existingAdmin == null)
-            return NotFound("Admin not found.");
-
-        // تحديث بيانات الـ Admin
         existingAdmin.AdminName = updatedAdmin.AdminName;
         if (!string.IsNullOrEmpty(updatedAdmin.PasswordHash))
         {
-            existingAdmin.PasswordHash = HashPassword(updatedAdmin.PasswordHash); // إعادة هاش للباسورد
+            existingAdmin.PasswordHash = HashPassword(updatedAdmin.PasswordHash);
         }
 
-        // حفظ التحديثات في قاعدة البيانات
         _context.Admins.Update(existingAdmin);
         await _context.SaveChangesAsync();
 
         return Ok("Admin updated successfully.");
     }
 
-    // DELETE: api/admin/{adminName}
     [HttpDelete("{adminName}")]
     public async Task<IActionResult> DeleteAdmin(string adminName)
     {
-        var admin = await _context.Admins
-            .FirstOrDefaultAsync(a => a.AdminName == adminName);
-
-        if (admin == null)
-            return NotFound("Admin not found.");
+        var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
+        if (admin == null) return NotFound("Admin not found.");
 
         _context.Admins.Remove(admin);
         await _context.SaveChangesAsync();
@@ -121,7 +108,51 @@ public class AdminController : ControllerBase
         return Ok("Admin deleted successfully.");
     }
 
-    // 🔐 هاش للباسورد
+    // -------------------- BookOwner Management --------------------
+
+    [HttpGet("ManageBookOwners")]
+    public async Task<ActionResult<IEnumerable<BookOwner>>> GetPendingBookOwners()
+    {
+        var pendingBookOwners = await _context.BookOwners
+            .Where(b => b.RequestStatus == "Pending")
+            .ToListAsync();
+
+        if (pendingBookOwners == null || !pendingBookOwners.Any())
+            return NotFound("No pending Book Owners.");
+
+        return Ok(pendingBookOwners);
+    }
+
+    [HttpPut("ApproveBookOwner/{id}")]
+    public async Task<IActionResult> ApproveBookOwner(int id)
+    {
+        var bookOwner = await _context.BookOwners.FindAsync(id);
+        if (bookOwner == null) return NotFound("Book Owner not found.");
+        if (bookOwner.RequestStatus != "Pending") return BadRequest("Book Owner request is already processed.");
+
+        bookOwner.RequestStatus = "Approved";
+        _context.Entry(bookOwner).State = EntityState.Modified;
+        await _context.SaveChangesAsync();
+
+        return Ok("Book Owner approved.");
+    }
+
+    [HttpPut("RejectBookOwner/{id}")]
+    public async Task<IActionResult> RejectBookOwner(int id)
+    {
+        var bookOwner = await _context.BookOwners.FindAsync(id);
+        if (bookOwner == null) return NotFound("Book Owner not found.");
+        if (bookOwner.RequestStatus != "Pending") return BadRequest("Book Owner request is already processed.");
+
+        bookOwner.RequestStatus = "Rejected";
+        _context.Entry(bookOwner).State = EntityState.Modified;
+        await _context.SaveChangesAsync();
+
+        return Ok("Book Owner rejected.");
+    }
+
+    // -------------------- Helpers --------------------
+
     private string HashPassword(string password)
     {
         var key = Encoding.UTF8.GetBytes(_secretKey);
@@ -130,7 +161,6 @@ public class AdminController : ControllerBase
         return Convert.ToBase64String(hash);
     }
 
-    // ✅ تحقق من الباسورد
     private bool VerifyPassword(string inputPassword, string storedPasswordHash)
     {
         var inputHash = HashPassword(inputPassword);
