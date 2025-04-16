@@ -1,4 +1,5 @@
 ﻿using BookSwap.Data.Contexts;
+using BookSwap.DTOS;
 using BookSwap.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +22,6 @@ public class BookOwnerController : ControllerBase
         _secretKey = configuration["Jwt:Key"];
     }
 
-    // POST: api/bookowner/signup
     [AllowAnonymous]
     [HttpPost("signup")]
     public async Task<IActionResult> SignUp([FromBody] BookOwner bookOwner)
@@ -41,7 +41,6 @@ public class BookOwnerController : ControllerBase
         return Ok("BookOwner registered. Waiting for admin approval.");
     }
 
-    // POST: api/bookowner/login
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] BookOwner bookOwner)
@@ -84,7 +83,60 @@ public class BookOwnerController : ControllerBase
                 existing.Email
             }
         });
+    }
 
+    //[Authorize(Roles = "Admin")]
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<BookOwner>>> GetBookOwners()
+    {
+        return await _context.BookOwners.ToListAsync();
+    }
+
+    //[Authorize(Roles = "BookOwner")]
+    [HttpGet("{id}")]
+    public async Task<ActionResult<BookOwner>> GetBookOwner(int id)
+    {
+        var bookOwner = await _context.BookOwners.FindAsync(id);
+        if (bookOwner == null)
+            return NotFound();
+        return bookOwner;
+    }
+
+    //[Authorize(Roles = "BookOwner")]
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] BookOwnerDTO updatedOwner)
+    {
+        var owner = await _context.BookOwners.FindAsync(id);
+
+        if (owner == null)
+            return NotFound("BookOwner not found.");
+
+        // Update properties
+        owner.BookOwnerName = updatedOwner.BookOwnerName;
+        owner.Password = HashPassword(updatedOwner.Password);
+        owner.ssn = updatedOwner.ssn;
+        owner.RequestStatus = updatedOwner.RequestStatus;
+        owner.Email = updatedOwner.Email;
+        owner.PhoneNumber = updatedOwner.PhoneNumber;
+
+        _context.BookOwners.Update(owner);
+        await _context.SaveChangesAsync();
+
+        return Ok("BookOwner updated successfully.");
+    }
+
+    //[Authorize(Roles = "Admin")]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteBookOwner(int id)
+    {
+        var bookOwner = await _context.BookOwners.FindAsync(id);
+        if (bookOwner == null)
+            return NotFound();
+
+        _context.BookOwners.Remove(bookOwner);
+        await _context.SaveChangesAsync();
+
+        return NoContent();
     }
 
     private string HashPassword(string password)
