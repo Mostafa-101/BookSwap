@@ -22,7 +22,14 @@ namespace BookSwap.Models
         [Required]
 
         public string RequestStatus { get; set; }
+        [Required]
 
+        public string Email { get; set; }
+
+        [Required]
+
+        public string PhoneNumber { get; set; }
         public List<BookPost> BookPosts { get; set; }
+
     }
 }

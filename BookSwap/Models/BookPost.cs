@@ -25,12 +25,13 @@ namespace BookSwap.Models
         [Required]
 
         public string ISBN { get; set; }
-        [MaxLength(200)]
-        public string Description { get; set; }
+        [MaxLength(1000)]
+        public string? Description { get; set; }
+        [Required]
+        public string Language { get; set; }
         [Required]
 
-
-        public DateTime PostDate { get; set; }
+        public DateTime PublicationDate { get; set; }
         [Required]
 
         public bool IsAvailable { get; set; }
