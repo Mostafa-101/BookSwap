@@ -7,8 +7,8 @@ namespace BookSwap.Models
         [Key]
         [Required]
         public string AdminName { get; set; }
-        [Required]
 
-        public string Password { get; set; }
+        [Required]
+        public string PasswordHash { get; set; }  // تغيير من "Password" إلى "PasswordHash"
     }
 }
