@@ -104,37 +104,9 @@ namespace BookSwap.Controllers
             return Ok(readers);
         }
 
-        // Get all available books
-        [HttpGet("books")]
-        public async Task<IActionResult> GetAvailableBooks()
-        {
-            var books = await _context.BookPosts
-                .Where(b => b.IsAvailable)
-                .ToListAsync();
 
-            if (books.Count == 0)
-                return NotFound("No available books found.");
 
-            return Ok(books);
-        }
-
-        // Search books by genre and price
-        [HttpGet("search")]
-        public async Task<IActionResult> SearchBooks([FromQuery] string genre, [FromQuery] decimal? maxPrice)
-        {
-            var query = _context.BookPosts.AsQueryable();
-
-            if (!string.IsNullOrEmpty(genre))
-                query = query.Where(b => b.Genre.Contains(genre));
-
-            if (maxPrice.HasValue)
-                query = query.Where(b => b.Price <= maxPrice.Value);
-
-            var books = await query.ToListAsync();
-
-            return Ok(books);
-        }
-
+        /*
         // Apply to borrow a book
         [HttpPost("borrow/{bookPostId}")]
         [Authorize]
@@ -148,27 +120,57 @@ namespace BookSwap.Controllers
             await _context.SaveChangesAsync();
 
             return Ok("Request to borrow the book has been submitted.");
-        }
+        }*/
 
         // Like a book
-        [HttpPost("like/{bookPostId}")]
+        [HttpPost("like")]
         [Authorize]
-        public async Task<IActionResult> LikeBook(int bookPostId, [FromBody] Like like)
+        public async Task<IActionResult> LikeOrDislikeBook(Like like)
         {
-            var bookPost = await _context.BookPosts.FindAsync(bookPostId);
+            var bookPost = await _context.BookPosts.FindAsync(like.BookPostID);
             if (bookPost == null)
                 return NotFound("Book not found.");
 
+           
             _context.Likes.Add(like);
             await _context.SaveChangesAsync();
 
-            return Ok("Book liked successfully.");
+            return Ok(like.IsLike ? "Book liked successfully." : "Book disliked successfully.");
         }
+        [HttpPut("like")]
+        [Authorize]
+        public async Task<IActionResult> ToggleReaction( Like like)
+        {
+            var reaction = await _context.Likes
+                .FirstOrDefaultAsync(l => l.BookPostID == like.BookPostID && l.ReaderID == like.ReaderID);
 
+            if (reaction == null)
+                return NotFound("Reaction not found.");
+
+            reaction.IsLike = !reaction.IsLike; // Toggle like to dislike or vice versa
+            await _context.SaveChangesAsync();
+
+            return Ok(reaction.IsLike ? "Changed to like successfully." : "Changed to dislike successfully.");
+        }
+        [HttpDelete("like")]
+        [Authorize]
+        public async Task<IActionResult> DeleteReaction([FromBody] Like like)
+        {
+            var reaction = await _context.Likes
+                .FirstOrDefaultAsync(l => l.BookPostID == like.BookPostID && l.ReaderID == like.ReaderID);
+
+            if (reaction == null)
+                return NotFound("Reaction not found.");
+
+            _context.Likes.Remove(reaction);
+            await _context.SaveChangesAsync();
+
+            return Ok("Reaction deleted successfully.");
+        }
         // Comment on a book
         [HttpPost("comment/{bookPostId}")]
         [Authorize]
-        public async Task<IActionResult> CommentOnBook(int bookPostId, [FromBody] Comment comment)
+        public async Task<IActionResult> CommentOnBookPost(int bookPostId, [FromBody] Comment comment)
         {
             var bookPost = await _context.BookPosts.FindAsync(bookPostId);
             if (bookPost == null)
@@ -180,17 +182,7 @@ namespace BookSwap.Controllers
             return Ok("Comment added successfully.");
         }
 
-        // Get all comments on a book
-        [HttpGet("comments/{bookPostId}")]
-        public async Task<IActionResult> GetComments(int bookPostId)
-        {
-            var comments = await _context.Comments
-                .Where(c => c.BookPostID == bookPostId)
-                .ToListAsync();
-
-            return Ok(comments);
-        }
-
+       
         private string HashPassword(string password)
         {
             var key = Encoding.UTF8.GetBytes("Your_Secret_Key");
