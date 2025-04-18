@@ -2,7 +2,7 @@
 
 namespace BookSwap.DTOS
 {
-    public class BookOwnerDTO
+    public class BookOwnerSignUpDTO
     {
         public string BookOwnerName { get; set; }
         public string Password { get; set; }

@@ -118,6 +118,7 @@ public class AdminController : ControllerBase
             .Where(b => b.RequestStatus == "Pending")
             .Select(b => new BookOwnerDTOResponse
             {
+                BookOwnerID= b.BookOwnerID,
                 BookOwnerName = b.BookOwnerName,
                 ssn = b.ssn,
                 RequestStatus = b.RequestStatus,
@@ -157,13 +158,15 @@ public class AdminController : ControllerBase
         return Ok($"Book Owner {action}d.");
     }
     [HttpGet("ManageBookPosts")]
-    public async Task<ActionResult<IEnumerable<BookPostDTO>>> GetPendingBookPosts()
+    public async Task<ActionResult<IEnumerable<BookPostResponseDto>>> GetPendingBookPosts()
     {
         var pendingBookPosts = await _context.BookPosts
             .Where(b => b.PostStatus == "Pending")
-            .Select(b => new BookPostDTO
+            .Include(b => b.BookOwner) // Include BookOwner to access name
+            .Select(b => new BookPostResponseDto
             {
                 BookOwnerID = b.BookOwnerID,
+                BookOwnerName = b.BookOwner.BookOwnerName,
                 Title = b.Title,
                 Genre = b.Genre,
                 ISBN = b.ISBN,

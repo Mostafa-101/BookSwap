@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -18,16 +19,19 @@ namespace BookSwap.Controllers
     public class ReaderController : ControllerBase
     {
         private readonly BookSwapDbContext _context;
+        private readonly string _secretKey;
 
-        public ReaderController(BookSwapDbContext context)
+        public ReaderController(BookSwapDbContext context, IConfiguration configuration)
         {
             _context = context;
+            _secretKey = configuration["Jwt:Key"];
+
         }
 
         // Reader sign up (registration)
         [AllowAnonymous]
         [HttpPost("signup")]
-        public async Task<IActionResult> SignUp([FromBody] ReaderDTO readerDTO)
+        public async Task<IActionResult> SignUp([FromBody] ReaderSignUpDTO readerDTO)
         {
             var exists = await _context.Readers
                 .AnyAsync(r => r.ReaderName == readerDTO.ReaderName);
@@ -52,23 +56,34 @@ namespace BookSwap.Controllers
         // Reader login (generate JWT token)
         [AllowAnonymous]
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] ReaderDTO readerDTO)
+        public async Task<IActionResult> Login([FromBody] ReaderLoginDTO readerDTO)
         {
+            // Validate input
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
+
+            // Find reader by ReaderName
             var existing = await _context.Readers
                 .FirstOrDefaultAsync(r => r.ReaderName == readerDTO.ReaderName);
 
             if (existing == null || !VerifyPassword(readerDTO.Password, existing.Password))
-                return Unauthorized("Invalid credentials.");
+            {
+                return Unauthorized(new { message = "Invalid credentials." });
+            }
 
+            // Generate JWT token
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes("Your_Secret_Key");
+            var key = Encoding.ASCII.GetBytes(_secretKey); 
 
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                Subject = new System.Security.Claims.ClaimsIdentity(new[]
+                Subject = new ClaimsIdentity(new[]
                 {
-                    new System.Security.Claims.Claim("name", existing.ReaderName),
-                    new System.Security.Claims.Claim("role", "Reader")
+                    new Claim("name", existing.ReaderName),
+                    new Claim("role", "Reader"),
+                    new Claim("readerId", existing.ReaderID.ToString()) // Optional: Include ReaderID for use in other APIs
                 }),
                 Expires = DateTime.UtcNow.AddHours(2),
                 SigningCredentials = new SigningCredentials(
@@ -79,6 +94,7 @@ namespace BookSwap.Controllers
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
 
+            // Return token and reader details
             return Ok(new
             {
                 Token = tokenString,
@@ -90,6 +106,7 @@ namespace BookSwap.Controllers
                 }
             });
         }
+
 
         // Get all readers
         [HttpGet("all")]
@@ -150,8 +167,6 @@ namespace BookSwap.Controllers
                 Reader = reader
             };
 
-            // Update book post status
-        //    bookPost.PostStatus = "Borrowed";
 
             try
             {
@@ -170,7 +185,97 @@ namespace BookSwap.Controllers
                 return StatusCode(500, new { message = "Error processing borrow request", error = ex.Message });
             }
         }
+        [HttpPost("return")]
+        public async Task<ActionResult<BookRequestResponseDTO>> ReturnBook([FromBody] BookRequestResponseDTO requestDto)
+        {
+            // Validate input DTO
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
 
+            // Find the book request
+            var bookRequest = await _context.BookRequests
+                .Include(br => br.BookPost)
+                .FirstOrDefaultAsync(br => br.RequsetID == requestDto.RequsetID);
+
+            if (bookRequest == null)
+            {
+                return NotFound(new { message = "Book request not found" });
+            }
+
+            // Verify DTO data matches the database
+            if (bookRequest.BookPostID != requestDto.BookPostID || bookRequest.ReaderID != requestDto.ReaderID)
+            {
+                return BadRequest(new { message = "Invalid book request details" });
+            }
+
+            // Check if the book is currently borrowed
+            if (bookRequest.RequsetStatus != "Borrowed")
+            {
+                return BadRequest(new { message = "Book is not currently borrowed" });
+            }
+
+            // Update book request status
+            bookRequest.RequsetStatus = "Returned";
+
+            // Update book post status to available
+            if (bookRequest.BookPost != null)
+            {
+                bookRequest.BookPost.PostStatus = "Available";
+            }
+
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                return StatusCode(500, new { message = "Error updating the database", error = ex.Message });
+            }
+
+            // Create response DTO
+            var response = new BookRequestResponseDTO
+            {
+                RequsetID = bookRequest.RequsetID,
+                BookPostID = bookRequest.BookPostID,
+                ReaderID = bookRequest.ReaderID,
+                RequsetStatus = bookRequest.RequsetStatus
+            };
+
+            return Ok(response);
+        }
+        [HttpGet("user/{readerId}")]
+        public async Task<ActionResult<IEnumerable<BookRequestWithTitleResponseDTO>>> GetBookRequestsForUser(int readerId)
+        {
+            // Check if reader exists
+            var readerExists = await _context.Readers.AnyAsync(r => r.ReaderID == readerId);
+            if (!readerExists)
+            {
+                return NotFound(new { message = "Reader not found" });
+            }
+
+            // Retrieve book requests with book titles
+            var bookRequests = await _context.BookRequests
+                .Where(br => br.ReaderID == readerId)
+                .Include(br => br.BookPost)
+                .Select(br => new BookRequestWithTitleResponseDTO
+                {
+                    RequsetID = br.RequsetID,
+                    BookPostID = br.BookPostID,
+                    ReaderID = br.ReaderID,
+                    RequsetStatus = br.RequsetStatus,
+                    BookTitle =  br.BookPost.Title 
+                })
+                .ToListAsync();
+
+            if (!bookRequests.Any())
+            {
+                return Ok(new List<BookRequestWithTitleResponseDTO>());
+            }
+
+            return Ok(bookRequests);
+        }
         // Like a book
         [HttpPost("like")]
         [Authorize]

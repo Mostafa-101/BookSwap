@@ -3,6 +3,9 @@
     // DTO for returning book post data
     public class BookPostResponseDto
     {
+        public int BookOwnerID { get; set; }
+
+        public string BookOwnerName { get; set; }
         public int BookPostID { get; set; }
         public string Title { get; set; }
         public string Genre { get; set; }

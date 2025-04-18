@@ -52,8 +52,11 @@ namespace BookSwap.Controllers
                 .Where(bp => bp.PostStatus == "Available" &&
                             bp.StartDate <= currentDate &&
                             bp.EndDate >= currentDate)
+                .Include(bp => bp.BookOwner) // Include BookOwner to access name
                 .Select(bp => new BookPostResponseDto
                 {
+                    BookOwnerID=bp.BookOwnerID,
+                    BookOwnerName = bp.BookOwner.BookOwnerName,
                     BookPostID = bp.BookPostID,
                     Title = bp.Title,
                     Genre = bp.Genre,
@@ -67,7 +70,6 @@ namespace BookSwap.Controllers
                     CoverPhoto = bp.CoverPhoto != null ? Convert.ToBase64String(bp.CoverPhoto) : null,
                     TotalLikes = bp.Likes.Count(l => l.IsLike),
                     TotalDislikes = bp.Likes.Count(l => !l.IsLike),
-                   
                 })
                 .ToListAsync();
 
@@ -170,16 +172,17 @@ namespace BookSwap.Controllers
         }
         [HttpGet("Search")]
         public async Task<IActionResult> SearchAvailableBookPosts(
-            [FromQuery] string? genre,
-            [FromQuery] string? title,
-            [FromQuery] string? language,
-            [FromQuery] int? price)
+       [FromQuery] string? genre,
+       [FromQuery] string? title,
+       [FromQuery] string? language,
+       [FromQuery] int? price)
         {
             var currentDate = DateTime.UtcNow;
             var query = _db.BookPosts
                 .Where(bp => bp.PostStatus == "Available" &&
                             bp.StartDate <= currentDate &&
                             bp.EndDate >= currentDate)
+                .Include(bp => bp.BookOwner) // Include BookOwner to access name
                 .AsQueryable();
 
             if (!string.IsNullOrEmpty(genre))
@@ -197,6 +200,8 @@ namespace BookSwap.Controllers
             var filteredPosts = await query
                 .Select(bp => new BookPostResponseDto
                 {
+                    BookOwnerID = bp.BookOwnerID,
+                    BookOwnerName = bp.BookOwner.BookOwnerName,
                     BookPostID = bp.BookPostID,
                     Title = bp.Title,
                     Genre = bp.Genre,
@@ -210,7 +215,6 @@ namespace BookSwap.Controllers
                     CoverPhoto = bp.CoverPhoto != null ? Convert.ToBase64String(bp.CoverPhoto) : null,
                     TotalLikes = bp.Likes.Count(l => l.IsLike),
                     TotalDislikes = bp.Likes.Count(l => !l.IsLike),
-                  
                 })
                 .ToListAsync();
 

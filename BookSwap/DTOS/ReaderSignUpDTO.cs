@@ -2,7 +2,7 @@
 
 namespace BookSwap.DTOS
 {
-    public class ReaderDTO
+    public class ReaderSignUpDTO
     {
         public string ReaderName { get; set; }
 

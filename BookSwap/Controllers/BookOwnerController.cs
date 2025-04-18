@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -23,7 +24,7 @@ public class BookOwnerController : ControllerBase
     }
     [AllowAnonymous]
     [HttpPost("signup")]
-    public async Task<IActionResult> SignUp([FromBody] BookOwnerDTO bookOwnerDto)
+    public async Task<IActionResult> SignUp([FromBody] BookOwnerSignUpDTO bookOwnerDto)
     {
         var exists = await _context.BookOwners
             .AnyAsync(b => b.BookOwnerName == bookOwnerDto.BookOwnerName);
@@ -49,27 +50,41 @@ public class BookOwnerController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] BookOwner bookOwner)
+    public async Task<IActionResult> Login([FromBody] BookOwnerLoginDTO bookOwnerDTO)
     {
+        // Validate input
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        // Find book owner by BookOwnerName
         var existing = await _context.BookOwners
-            .FirstOrDefaultAsync(b => b.BookOwnerName == bookOwner.BookOwnerName);
+            .FirstOrDefaultAsync(b => b.BookOwnerName == bookOwnerDTO.BookOwnerName);
 
-        if (existing == null || !VerifyPassword(bookOwner.Password, existing.Password))
-            return Unauthorized("Invalid credentials.");
+        if (existing == null || !VerifyPassword(bookOwnerDTO.Password, existing.Password))
+        {
+            return Unauthorized(new { message = "Invalid credentials." });
+        }
 
+        // Check if account is approved
         if (existing.RequestStatus != "Approved")
+        {
             return Forbid("Your account is not approved yet.");
+        }
 
+        // Generate JWT token
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.ASCII.GetBytes(_secretKey);
 
         var tokenDescriptor = new SecurityTokenDescriptor
         {
-            Subject = new System.Security.Claims.ClaimsIdentity(new[]
+            Subject = new ClaimsIdentity(new[]
             {
-                new System.Security.Claims.Claim("name", existing.BookOwnerName),
-                new System.Security.Claims.Claim("role", "BookOwner")
-            }),
+                    new Claim("name", existing.BookOwnerName),
+                    new Claim("role", "BookOwner"),
+                    new Claim("bookOwnerId", existing.BookOwnerID.ToString()) // Optional: Include BookOwnerID for other APIs
+                }),
             Expires = DateTime.UtcNow.AddHours(2),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
@@ -79,6 +94,7 @@ public class BookOwnerController : ControllerBase
         var token = tokenHandler.CreateToken(tokenDescriptor);
         var tokenString = tokenHandler.WriteToken(token);
 
+        // Return token and book owner details
         return Ok(new
         {
             Token = tokenString,
@@ -110,7 +126,7 @@ public class BookOwnerController : ControllerBase
 
     //[Authorize(Roles = "BookOwner")]
     [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] BookOwnerDTO updatedOwner)
+    public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] BookOwnerSignUpDTO updatedOwner)
     {
         var owner = await _context.BookOwners.FindAsync(id);
 
