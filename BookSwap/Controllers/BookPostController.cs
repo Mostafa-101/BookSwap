@@ -19,30 +19,7 @@ namespace BookSwap.Controllers
         {
             _db = db;
         }
-        [HttpPost]
-        public async Task<IActionResult> CreateBookPost([FromForm] BookPostDTO dto)
-        {
-            using var stream = new MemoryStream();
-            await dto.CoverPhoto.CopyToAsync(stream);
-            var post = new BookPost
-            {
-                BookOwnerID = dto.BookOwnerID,
-                Title = dto.Title,
-                Genre = dto.Genre,
-                ISBN = dto.ISBN,
-                Description = dto.Description,
-                Language = dto.Language,
-                PublicationDate = dto.PublicationDate,
-                StartDate = dto.StartDate,
-                EndDate = dto.EndDate,
-                Price = dto.Price,
-                PostStatus="Pending",
-                CoverPhoto =stream.ToArray()
-            };
-            await _db.BookPosts.AddAsync(post);
-            await _db.SaveChangesAsync();
-            return Ok("Book post created successfully!");
-        }
+      
         [HttpGet("available")]
         public async Task<ActionResult<IEnumerable<BookPostResponseDto>>> GetAvailableBookPosts()
         {
@@ -123,53 +100,6 @@ namespace BookSwap.Controllers
         }
 
 
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteBookPost(int id)
-        {
-            var post = await _db.BookPosts.FindAsync(id);
-
-            if (post == null)
-            {
-                return NotFound($"No BookPost found with ID = {id}");
-            }
-
-            if (post.PostStatus == "Borrowed") 
-            {
-                return BadRequest("Cannot delete a borrowed book post.");
-            }
-
-            _db.BookPosts.Remove(post);
-            await _db.SaveChangesAsync();
-
-            return Ok($"BookPost with ID = {id} deleted successfully.");
-        }
-
-        [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateBookPost(int id, [FromForm] BookPostDTO dto)
-        {
-            var post = await _db.BookPosts.FindAsync(id);
-            using var stream = new MemoryStream();
-            await dto.CoverPhoto.CopyToAsync(stream);
-            if (post == null)
-                return NotFound($"BookPost with ID = {id} not found.");
-
-            post.Title = dto.Title;
-            post.Genre = dto.Genre;
-            post.ISBN = dto.ISBN;
-            post.Description = dto.Description;
-            post.Language = dto.Language;
-            post.PublicationDate = dto.PublicationDate;
-            post.StartDate = dto.StartDate;
-            post.EndDate = dto.EndDate;
-            post.Price = dto.Price;
-            post.CoverPhoto = stream.ToArray();
-
-
-
-            await _db.SaveChangesAsync();
-
-            return Ok($"BookPost with ID = {id} updated successfully.");
-        }
         [HttpGet("Search")]
         public async Task<IActionResult> SearchAvailableBookPosts(
        [FromQuery] string? genre,

@@ -216,7 +216,7 @@ namespace BookSwap.Controllers
             }
 
             // Check if the book is currently borrowed
-            if (bookRequest.RequsetStatus != "Borrowed")
+            if (bookRequest.RequsetStatus != "Accepted")
             {
                 return BadRequest(new { message = "Book is not currently borrowed" });
             }

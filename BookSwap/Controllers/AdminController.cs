@@ -2,6 +2,7 @@
 using BookSwap.Data.Contexts;
 using BookSwap.DTOS;
 using BookSwap.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +24,8 @@ public class AdminController : ControllerBase
     {
         _context = context;
         _secretKey = configuration["Jwt:Key"];
+        _issuer = configuration["jwt:Issuer"];
+        _Audience = configuration["jwt:Audience"];
     }
 
     // -------------------- Auth Operations --------------------
@@ -73,47 +76,48 @@ public class AdminController : ControllerBase
         return Ok(new { Token = tokenString });
     }
 
-  /*  // -------------------- Admin CRUD --------------------
+    /*  // -------------------- Admin CRUD --------------------
 
-    [HttpGet("{adminName}")]
-    public async Task<IActionResult> GetAdmin(string adminName)
-    {
-        var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
-        if (admin == null) return NotFound("Admin not found.");
-        return Ok(admin);
-    }
+      [HttpGet("{adminName}")]
+      public async Task<IActionResult> GetAdmin(string adminName)
+      {
+          var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
+          if (admin == null) return NotFound("Admin not found.");
+          return Ok(admin);
+      }
 
-    [HttpPut("{adminName}")]
-    public async Task<IActionResult> UpdateAdmin(string adminName, [FromBody] Admin updatedAdmin)
-    {
-        var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
-        if (existingAdmin == null) return NotFound("Admin not found.");
+      [HttpPut("{adminName}")]
+      public async Task<IActionResult> UpdateAdmin(string adminName, [FromBody] Admin updatedAdmin)
+      {
+          var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
+          if (existingAdmin == null) return NotFound("Admin not found.");
 
-        existingAdmin.AdminName = updatedAdmin.AdminName;
-        if (!string.IsNullOrEmpty(updatedAdmin.PasswordHash))
-        {
-            existingAdmin.PasswordHash = HashPassword(updatedAdmin.PasswordHash);
-        }
+          existingAdmin.AdminName = updatedAdmin.AdminName;
+          if (!string.IsNullOrEmpty(updatedAdmin.PasswordHash))
+          {
+              existingAdmin.PasswordHash = HashPassword(updatedAdmin.PasswordHash);
+          }
 
-        _context.Admins.Update(existingAdmin);
-        await _context.SaveChangesAsync();
+          _context.Admins.Update(existingAdmin);
+          await _context.SaveChangesAsync();
 
-        return Ok("Admin updated successfully.");
-    }
+          return Ok("Admin updated successfully.");
+      }
 
-    [HttpDelete("{adminName}")]
-    public async Task<IActionResult> DeleteAdmin(string adminName)
-    {
-        var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
-        if (admin == null) return NotFound("Admin not found.");
+      [HttpDelete("{adminName}")]
+      public async Task<IActionResult> DeleteAdmin(string adminName)
+      {
+          var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
+          if (admin == null) return NotFound("Admin not found.");
 
-        _context.Admins.Remove(admin);
-        await _context.SaveChangesAsync();
+          _context.Admins.Remove(admin);
+          await _context.SaveChangesAsync();
 
-        return Ok("Admin deleted successfully.");
-    }
-    */
+          return Ok("Admin deleted successfully.");
+      }
+      */
     // -------------------- BookOwner Management --------------------
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 
     [HttpGet("ManageBookOwners")]
     public async Task<ActionResult<IEnumerable<BookOwnerDTOResponse>>> GetPendingBookOwners()
@@ -131,11 +135,10 @@ public class AdminController : ControllerBase
             })
             .ToListAsync();
 
-        if (pendingBookOwners == null || !pendingBookOwners.Any())
-            return NotFound("No pending Book Owners.");
-
         return Ok(pendingBookOwners);
     }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [HttpPut("ProcessBookOwner/{id}")]
     public async Task<IActionResult> ProcessBookOwner(int id, [FromQuery] string action)
     {
@@ -162,6 +165,8 @@ public class AdminController : ControllerBase
         return Ok($"Book Owner {action}d.");
     }
     [HttpGet("ManageBookPosts")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     public async Task<ActionResult<IEnumerable<BookPostResponseDto>>> GetPendingBookPosts()
     {
         var pendingBookPosts = await _context.BookPosts
@@ -184,11 +189,11 @@ public class AdminController : ControllerBase
             })
             .ToListAsync();
 
-        if (pendingBookPosts == null || !pendingBookPosts.Any())
-            return NotFound("No pending Book Posts.");
-
+        
         return Ok(pendingBookPosts);
     }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [HttpPut("ProcessBookPosts/{id}")]
     public async Task<IActionResult> ProcessBookPosts(int id, [FromQuery] string action)
     {

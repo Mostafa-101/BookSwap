@@ -2,6 +2,7 @@
 using BookSwap.Data.Contexts;
 using BookSwap.DTOS;
 using BookSwap.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -117,60 +118,136 @@ public class BookOwnerController : ControllerBase
             }
         });
     }
+    [HttpPost]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    public async Task<IActionResult> CreateBookPost([FromForm] BookPostDTO dto)
+    {
+        using var stream = new MemoryStream();
+        await dto.CoverPhoto.CopyToAsync(stream);
+        var post = new BookPost
+        {
+            BookOwnerID = dto.BookOwnerID,
+            Title = dto.Title,
+            Genre = dto.Genre,
+            ISBN = dto.ISBN,
+            Description = dto.Description,
+            Language = dto.Language,
+            PublicationDate = dto.PublicationDate,
+            StartDate = dto.StartDate,
+            EndDate = dto.EndDate,
+            Price = dto.Price,
+            PostStatus = "Pending",
+            CoverPhoto = stream.ToArray()
+        };
+        await _context.BookPosts.AddAsync(post);
+        await _context.SaveChangesAsync();
+        return Ok("Book post created successfully!");
+    }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteBookPost(int id)
+    {
+        var post = await _context.BookPosts.FindAsync(id);
 
-   // //[Authorize(Roles = "Admin")]
-   // [HttpGet]
-   // public async Task<ActionResult<IEnumerable<BookOwner>>> GetBookOwners()
-   // {
-   //     return await _context.BookOwners.ToListAsync();
-   // }
+        if (post == null)
+        {
+            return NotFound($"No BookPost found with ID = {id}");
+        }
 
-   // //[Authorize(Roles = "BookOwner")]
-   // [HttpGet("{id}")]
-   // public async Task<ActionResult<BookOwner>> GetBookOwner(int id)
-   // {
-   //     var bookOwner = await _context.BookOwners.FindAsync(id);
-   //     if (bookOwner == null)
-   //         return NotFound();
-   //     return bookOwner;
-   // }
+        if (post.PostStatus == "Borrowed")
+        {
+            return BadRequest("Cannot delete a borrowed book post.");
+        }
 
-   // //[Authorize(Roles = "BookOwner")]
-   ///* [HttpPut("{id}")]
-   // public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] BookOwnerSignUpDTO updatedOwner)
-   // {
-   //     var owner = await _context.BookOwners.FindAsync(id);
+        _context.BookPosts.Remove(post);
+        await _context.SaveChangesAsync();
 
-   //     if (owner == null)
-   //         return NotFound("BookOwner not found.");
+        return Ok($"BookPost with ID = {id} deleted successfully.");
+    }
 
-   //     // Update properties
-   //     owner.BookOwnerName = updatedOwner.BookOwnerName;
-   //     owner.Password = HashPassword(updatedOwner.Password);
-   //     owner.ssn = updatedOwner.ssn;
-   //     owner.RequestStatus = updatedOwner.RequestStatus;
-   //     owner.Email = updatedOwner.Email;
-   //     owner.PhoneNumber = updatedOwner.PhoneNumber;
+    [HttpPut("{id}")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 
-   //     _context.BookOwners.Update(owner);
-   //     await _context.SaveChangesAsync();
+    public async Task<IActionResult> UpdateBookPost(int id, [FromForm] BookPostDTO dto)
+    {
+        var post = await _context.BookPosts.FindAsync(id);
+        using var stream = new MemoryStream();
+        await dto.CoverPhoto.CopyToAsync(stream);
+        if (post == null)
+            return NotFound($"BookPost with ID = {id} not found.");
 
-   //     return Ok("BookOwner updated successfully.");
-   // }*/
+        post.Title = dto.Title;
+        post.Genre = dto.Genre;
+        post.ISBN = dto.ISBN;
+        post.Description = dto.Description;
+        post.Language = dto.Language;
+        post.PublicationDate = dto.PublicationDate;
+        post.StartDate = dto.StartDate;
+        post.EndDate = dto.EndDate;
+        post.Price = dto.Price;
+        post.CoverPhoto = stream.ToArray();
 
-   // //[Authorize(Roles = "Admin")]
-   // [HttpDelete("{id}")]
-   // public async Task<IActionResult> DeleteBookOwner(int id)
-   // {
-   //     var bookOwner = await _context.BookOwners.FindAsync(id);
-   //     if (bookOwner == null)
-   //         return NotFound();
 
-   //     _context.BookOwners.Remove(bookOwner);
-   //     await _context.SaveChangesAsync();
 
-   //     return NoContent();
-   // }
+        await _context.SaveChangesAsync();
+
+        return Ok($"BookPost with ID = {id} updated successfully.");
+    }
+    // //[Authorize(Roles = "Admin")]
+    // [HttpGet]
+    // public async Task<ActionResult<IEnumerable<BookOwner>>> GetBookOwners()
+    // {
+    //     return await _context.BookOwners.ToListAsync();
+    // }
+
+    // //[Authorize(Roles = "BookOwner")]
+    // [HttpGet("{id}")]
+    // public async Task<ActionResult<BookOwner>> GetBookOwner(int id)
+    // {
+    //     var bookOwner = await _context.BookOwners.FindAsync(id);
+    //     if (bookOwner == null)
+    //         return NotFound();
+    //     return bookOwner;
+    // }
+
+    // //[Authorize(Roles = "BookOwner")]
+    ///* [HttpPut("{id}")]
+    // public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] BookOwnerSignUpDTO updatedOwner)
+    // {
+    //     var owner = await _context.BookOwners.FindAsync(id);
+
+    //     if (owner == null)
+    //         return NotFound("BookOwner not found.");
+
+    //     // Update properties
+    //     owner.BookOwnerName = updatedOwner.BookOwnerName;
+    //     owner.Password = HashPassword(updatedOwner.Password);
+    //     owner.ssn = updatedOwner.ssn;
+    //     owner.RequestStatus = updatedOwner.RequestStatus;
+    //     owner.Email = updatedOwner.Email;
+    //     owner.PhoneNumber = updatedOwner.PhoneNumber;
+
+    //     _context.BookOwners.Update(owner);
+    //     await _context.SaveChangesAsync();
+
+    //     return Ok("BookOwner updated successfully.");
+    // }*/
+
+    // //[Authorize(Roles = "Admin")]
+    // [HttpDelete("{id}")]
+    // public async Task<IActionResult> DeleteBookOwner(int id)
+    // {
+    //     var bookOwner = await _context.BookOwners.FindAsync(id);
+    //     if (bookOwner == null)
+    //         return NotFound();
+
+    //     _context.BookOwners.Remove(bookOwner);
+    //     await _context.SaveChangesAsync();
+
+    //     return NoContent();
+    // }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [HttpPost("respond")]
     public async Task<IActionResult> RespondToBookRequest([FromBody] BookRequestResponseDTO responseDto)
     {
@@ -241,6 +318,7 @@ public class BookOwnerController : ControllerBase
             return StatusCode(500, new { message = "Error processing request response", error = ex.Message });
         }
     }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpGet("owner/")]
     public async Task<IActionResult> GetBookRequestsForOwner(int bookOwnerId)
     {
