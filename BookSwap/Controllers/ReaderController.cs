@@ -1,6 +1,7 @@
 ﻿using BookSwap.Data.Contexts;
 using BookSwap.DTOS;
 using BookSwap.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,12 +21,15 @@ namespace BookSwap.Controllers
     {
         private readonly BookSwapDbContext _context;
         private readonly string _secretKey;
+        private readonly string _issuer;
+        private readonly string _Audience;
 
         public ReaderController(BookSwapDbContext context, IConfiguration configuration)
         {
             _context = context;
             _secretKey = configuration["Jwt:Key"];
-
+            _issuer = configuration["jwt:Issuer"];
+            _Audience = configuration["jwt:Audience"];
         }
 
         // Reader sign up (registration)
@@ -42,7 +46,7 @@ namespace BookSwap.Controllers
             var reader = new Reader
             {
                 ReaderName = readerDTO.ReaderName,
-                Password = HashPassword(readerDTO.Password),
+                Password = PasswordService.HashPassword(readerDTO.Password),
                 Email = readerDTO.Email,
                 PhoneNumber = readerDTO.PhoneNumber
             };
@@ -68,7 +72,7 @@ namespace BookSwap.Controllers
             var existing = await _context.Readers
                 .FirstOrDefaultAsync(r => r.ReaderName == readerDTO.ReaderName);
 
-            if (existing == null || !VerifyPassword(readerDTO.Password, existing.Password))
+            if (existing == null || !PasswordService.VerifyPassword(readerDTO.Password, existing.Password))
             {
                 return Unauthorized(new { message = "Invalid credentials." });
             }
@@ -88,8 +92,10 @@ namespace BookSwap.Controllers
                 Expires = DateTime.UtcNow.AddHours(2),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(key),
-                    SecurityAlgorithms.HmacSha256Signature)
-            };
+                    SecurityAlgorithms.HmacSha256Signature),
+                Issuer=_issuer,
+                Audience = _Audience
+            };  
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
@@ -123,9 +129,8 @@ namespace BookSwap.Controllers
 
 
 
-        
         // Apply to borrow a book
-        [Authorize]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPost("borrow")]
         public async Task<IActionResult> BorrowBook([FromBody] BookRequestDTO requestDto)
         {
@@ -380,7 +385,7 @@ namespace BookSwap.Controllers
             return Ok("Comment added successfully.");
         }
 
-        private string HashPassword(string password)
+      /*  private string HashPassword(string password)
         {
             var key = Encoding.UTF8.GetBytes("Your_Secret_Key");
             using var hmac = new HMACSHA256(key);
@@ -391,6 +396,6 @@ namespace BookSwap.Controllers
         private bool VerifyPassword(string inputPassword, string storedHash)
         {
             return HashPassword(inputPassword) == storedHash;
-        }
+        }*/
     }
 }

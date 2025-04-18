@@ -1,4 +1,5 @@
-﻿using BookSwap.Data.Contexts;
+﻿using BookSwap.Controllers;
+using BookSwap.Data.Contexts;
 using BookSwap.DTOS;
 using BookSwap.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -16,11 +17,15 @@ public class BookOwnerController : ControllerBase
 {
     private readonly BookSwapDbContext _context;
     private readonly string _secretKey;
+    private readonly string _issuer;
+    private readonly string _Audience;
 
     public BookOwnerController(BookSwapDbContext context, IConfiguration configuration)
     {
         _context = context;
         _secretKey = configuration["Jwt:Key"];
+        _issuer = configuration["jwt:Issuer"];
+        _Audience = configuration["jwt:Audience"];
     }
     [AllowAnonymous]
     [HttpPost("signup")]
@@ -35,7 +40,7 @@ public class BookOwnerController : ControllerBase
         var bookOwner = new BookOwner
         {
             BookOwnerName = bookOwnerDto.BookOwnerName,
-            Password = HashPassword(bookOwnerDto.Password),
+            Password = PasswordService.HashPassword(bookOwnerDto.Password),
             ssn = bookOwnerDto.ssn,
             RequestStatus = "Pending",
             Email = bookOwnerDto.Email,
@@ -60,17 +65,21 @@ public class BookOwnerController : ControllerBase
 
         // Find book owner by BookOwnerName
         var existing = await _context.BookOwners
-            .FirstOrDefaultAsync(b => b.BookOwnerName == bookOwnerDTO.BookOwnerName);
+           .FirstOrDefaultAsync(b => b.BookOwnerName == bookOwnerDTO.BookOwnerName);
 
-        if (existing == null || !VerifyPassword(bookOwnerDTO.Password, existing.Password))
+        if (existing == null || !PasswordService.VerifyPassword(bookOwnerDTO.Password, existing.Password))
         {
             return Unauthorized(new { message = "Invalid credentials." });
         }
 
-        // Check if account is approved
+        // Check account status
+        if (existing.RequestStatus == "Pending")
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Your account is pending approval." });
+        }
         if (existing.RequestStatus != "Approved")
         {
-            return Forbid("Your account is not approved yet.");
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "Your account is not approved." });
         }
 
         // Generate JWT token
@@ -88,7 +97,9 @@ public class BookOwnerController : ControllerBase
             Expires = DateTime.UtcNow.AddHours(2),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
-                SecurityAlgorithms.HmacSha256Signature)
+                SecurityAlgorithms.HmacSha256Signature),
+            Issuer = _issuer,
+            Audience = _Audience
         };
 
         var token = tokenHandler.CreateToken(tokenDescriptor);
@@ -107,59 +118,59 @@ public class BookOwnerController : ControllerBase
         });
     }
 
-    //[Authorize(Roles = "Admin")]
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<BookOwner>>> GetBookOwners()
-    {
-        return await _context.BookOwners.ToListAsync();
-    }
+   // //[Authorize(Roles = "Admin")]
+   // [HttpGet]
+   // public async Task<ActionResult<IEnumerable<BookOwner>>> GetBookOwners()
+   // {
+   //     return await _context.BookOwners.ToListAsync();
+   // }
 
-    //[Authorize(Roles = "BookOwner")]
-    [HttpGet("{id}")]
-    public async Task<ActionResult<BookOwner>> GetBookOwner(int id)
-    {
-        var bookOwner = await _context.BookOwners.FindAsync(id);
-        if (bookOwner == null)
-            return NotFound();
-        return bookOwner;
-    }
+   // //[Authorize(Roles = "BookOwner")]
+   // [HttpGet("{id}")]
+   // public async Task<ActionResult<BookOwner>> GetBookOwner(int id)
+   // {
+   //     var bookOwner = await _context.BookOwners.FindAsync(id);
+   //     if (bookOwner == null)
+   //         return NotFound();
+   //     return bookOwner;
+   // }
 
-    //[Authorize(Roles = "BookOwner")]
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] BookOwnerSignUpDTO updatedOwner)
-    {
-        var owner = await _context.BookOwners.FindAsync(id);
+   // //[Authorize(Roles = "BookOwner")]
+   ///* [HttpPut("{id}")]
+   // public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] BookOwnerSignUpDTO updatedOwner)
+   // {
+   //     var owner = await _context.BookOwners.FindAsync(id);
 
-        if (owner == null)
-            return NotFound("BookOwner not found.");
+   //     if (owner == null)
+   //         return NotFound("BookOwner not found.");
 
-        // Update properties
-        owner.BookOwnerName = updatedOwner.BookOwnerName;
-        owner.Password = HashPassword(updatedOwner.Password);
-        owner.ssn = updatedOwner.ssn;
-        owner.RequestStatus = updatedOwner.RequestStatus;
-        owner.Email = updatedOwner.Email;
-        owner.PhoneNumber = updatedOwner.PhoneNumber;
+   //     // Update properties
+   //     owner.BookOwnerName = updatedOwner.BookOwnerName;
+   //     owner.Password = HashPassword(updatedOwner.Password);
+   //     owner.ssn = updatedOwner.ssn;
+   //     owner.RequestStatus = updatedOwner.RequestStatus;
+   //     owner.Email = updatedOwner.Email;
+   //     owner.PhoneNumber = updatedOwner.PhoneNumber;
 
-        _context.BookOwners.Update(owner);
-        await _context.SaveChangesAsync();
+   //     _context.BookOwners.Update(owner);
+   //     await _context.SaveChangesAsync();
 
-        return Ok("BookOwner updated successfully.");
-    }
+   //     return Ok("BookOwner updated successfully.");
+   // }*/
 
-    //[Authorize(Roles = "Admin")]
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteBookOwner(int id)
-    {
-        var bookOwner = await _context.BookOwners.FindAsync(id);
-        if (bookOwner == null)
-            return NotFound();
+   // //[Authorize(Roles = "Admin")]
+   // [HttpDelete("{id}")]
+   // public async Task<IActionResult> DeleteBookOwner(int id)
+   // {
+   //     var bookOwner = await _context.BookOwners.FindAsync(id);
+   //     if (bookOwner == null)
+   //         return NotFound();
 
-        _context.BookOwners.Remove(bookOwner);
-        await _context.SaveChangesAsync();
+   //     _context.BookOwners.Remove(bookOwner);
+   //     await _context.SaveChangesAsync();
 
-        return NoContent();
-    }
+   //     return NoContent();
+   // }
     [HttpPost("respond")]
     public async Task<IActionResult> RespondToBookRequest([FromBody] BookRequestResponseDTO responseDto)
     {
@@ -270,7 +281,7 @@ public class BookOwnerController : ControllerBase
         });
     }
 
-    private string HashPassword(string password)
+  /*  private string HashPassword(string password)
     {
         var key = Encoding.UTF8.GetBytes(_secretKey);
         using var hmac = new HMACSHA256(key);
@@ -281,5 +292,5 @@ public class BookOwnerController : ControllerBase
     private bool VerifyPassword(string inputPassword, string storedHash)
     {
         return HashPassword(inputPassword) == storedHash;
-    }
+    }*/
 }

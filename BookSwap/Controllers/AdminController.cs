@@ -1,4 +1,5 @@
-﻿using BookSwap.Data.Contexts;
+﻿using BookSwap.Controllers;
+using BookSwap.Data.Contexts;
 using BookSwap.DTOS;
 using BookSwap.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -16,7 +17,8 @@ public class AdminController : ControllerBase
 {
     private readonly BookSwapDbContext _context;
     private readonly string _secretKey;
-
+    private readonly string _issuer;
+    private readonly string _Audience;
     public AdminController(BookSwapDbContext context, IConfiguration configuration)
     {
         _context = context;
@@ -32,7 +34,7 @@ public class AdminController : ControllerBase
         var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
         if (existingAdmin != null) return BadRequest("Admin already exists.");
 
-        admin.PasswordHash = HashPassword(admin.PasswordHash);
+        admin.PasswordHash = PasswordService.HashPassword(admin.PasswordHash);
         _context.Admins.Add(admin);
         await _context.SaveChangesAsync();
 
@@ -44,7 +46,7 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> Login([FromBody] Admin admin)
     {
         var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
-        if (existingAdmin == null || !VerifyPassword(admin.PasswordHash, existingAdmin.PasswordHash))
+        if (existingAdmin == null || !PasswordService.VerifyPassword(admin.PasswordHash, existingAdmin.PasswordHash))
             return Unauthorized(new { message = "Invalid credentials." });
 
         var tokenHandler = new JwtSecurityTokenHandler();
@@ -60,7 +62,9 @@ public class AdminController : ControllerBase
             Expires = DateTime.UtcNow.AddHours(1),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
-                SecurityAlgorithms.HmacSha256Signature)
+                SecurityAlgorithms.HmacSha256Signature),
+            Issuer = _issuer,
+            Audience = _Audience
         };
 
         var token = tokenHandler.CreateToken(tokenDescriptor);
@@ -69,7 +73,7 @@ public class AdminController : ControllerBase
         return Ok(new { Token = tokenString });
     }
 
-    // -------------------- Admin CRUD --------------------
+  /*  // -------------------- Admin CRUD --------------------
 
     [HttpGet("{adminName}")]
     public async Task<IActionResult> GetAdmin(string adminName)
@@ -108,7 +112,7 @@ public class AdminController : ControllerBase
 
         return Ok("Admin deleted successfully.");
     }
-
+    */
     // -------------------- BookOwner Management --------------------
 
     [HttpGet("ManageBookOwners")]
@@ -212,7 +216,7 @@ public class AdminController : ControllerBase
     }
     // -------------------- Helpers --------------------
 
-    private string HashPassword(string password)
+   private string HashPassword(string password)
     {
         var key = Encoding.UTF8.GetBytes(_secretKey);
         using var hmac = new HMACSHA256(key);
@@ -220,9 +224,9 @@ public class AdminController : ControllerBase
         return Convert.ToBase64String(hash);
     }
 
-    private bool VerifyPassword(string inputPassword, string storedPasswordHash)
+  /*  private bool VerifyPassword(string inputPassword, string storedPasswordHash)
     {
         var inputHash = HashPassword(inputPassword);
         return inputHash == storedPasswordHash;
-    }
+    }*/
 }
