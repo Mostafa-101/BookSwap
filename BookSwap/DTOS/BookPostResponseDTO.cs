@@ -16,6 +16,5 @@
         public string CoverPhoto { get; set; } // Base64-encoded string for the image
         public int TotalLikes { get; set; }
         public int TotalDislikes { get; set; }
-        public List<CommentDto> Comments { get; set; }
     }
 }

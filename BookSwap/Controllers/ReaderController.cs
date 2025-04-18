@@ -106,27 +106,82 @@ namespace BookSwap.Controllers
 
 
 
-        /*
+        
         // Apply to borrow a book
-        [HttpPost("borrow/{bookPostId}")]
         [Authorize]
-        public async Task<IActionResult> BorrowBook(int bookPostId, [FromBody] BookRequest bookRequest)
+        [HttpPost("borrow")]
+        public async Task<IActionResult> BorrowBook([FromBody] BookRequestDTO requestDto)
         {
-            var bookPost = await _context.BookPosts.FindAsync(bookPostId);
-            if (bookPost == null || !bookPost.IsAvailable)
-                return BadRequest("This book is not available for borrowing.");
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(ModelState);
+            }
 
-            _context.BookRequests.Add(bookRequest);
-            await _context.SaveChangesAsync();
+            // Verify book post exists and is available
+            var bookPost = await _context.BookPosts
+                .FirstOrDefaultAsync(bp => bp.BookPostID == requestDto.BookPostID);
 
-            return Ok("Request to borrow the book has been submitted.");
-        }*/
+            if (bookPost == null)
+            {
+                return NotFound(new { message = "Book post not found" });
+            }
+
+            if (bookPost.PostStatus.ToLower() != "available")
+            {
+                return BadRequest(new { message = "Book is not available for borrowing" });
+            }
+
+            // Verify reader exists
+            var reader = await _context.Readers
+                .FirstOrDefaultAsync(r => r.ReaderID == requestDto.ReaderID);
+
+            if (reader == null)
+            {
+                return NotFound(new { message = "Reader not found" });
+            }
+
+            // Create new book request
+            var bookRequest = new BookRequest
+            {
+                BookPostID = requestDto.BookPostID,
+                ReaderID = requestDto.ReaderID,
+                RequsetStatus = "Pending", // Initial status
+                BookPost = bookPost,
+                Reader = reader
+            };
+
+            // Update book post status
+        //    bookPost.PostStatus = "Borrowed";
+
+            try
+            {
+                _context.BookRequests.Add(bookRequest);
+                _context.BookPosts.Update(bookPost);
+                await _context.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    message = "Borrow request created successfully",
+                    requestId = bookRequest.RequsetID
+                });
+            }
+            catch (DbUpdateException ex)
+            {
+                return StatusCode(500, new { message = "Error processing borrow request", error = ex.Message });
+            }
+        }
 
         // Like a book
         [HttpPost("like")]
         [Authorize]
-        public async Task<IActionResult> LikeOrDislikeBook(Like like)
+        public async Task<IActionResult> LikeOrDislikeBook([FromBody] LikeDTO DTO)
         {
+            var like = new Like
+            {
+                ReaderID = DTO.ReaderID,
+                BookPostID = DTO.BookPostID,
+                IsLike = DTO.IsLike
+            };
             var bookPost = await _context.BookPosts.FindAsync(like.BookPostID);
             if (bookPost == null)
                 return NotFound("Book not found.");
@@ -139,8 +194,14 @@ namespace BookSwap.Controllers
         }
         [HttpPut("like")]
         [Authorize]
-        public async Task<IActionResult> ToggleReaction( Like like)
+        public async Task<IActionResult> ToggleReaction([FromBody] LikeDTO DTO)
         {
+            var like = new Like
+            {
+                ReaderID = DTO.ReaderID,
+                BookPostID = DTO.BookPostID,
+                IsLike = DTO.IsLike
+            };
             var reaction = await _context.Likes
                 .FirstOrDefaultAsync(l => l.BookPostID == like.BookPostID && l.ReaderID == like.ReaderID);
 
@@ -154,8 +215,14 @@ namespace BookSwap.Controllers
         }
         [HttpDelete("like")]
         [Authorize]
-        public async Task<IActionResult> DeleteReaction([FromBody] Like like)
+        public async Task<IActionResult> DeleteReaction([FromBody] LikeDTO DTO)
         {
+            var like = new Like
+            {
+                ReaderID = DTO.ReaderID,
+                BookPostID = DTO.BookPostID,
+                IsLike = DTO.IsLike
+            };
             var reaction = await _context.Likes
                 .FirstOrDefaultAsync(l => l.BookPostID == like.BookPostID && l.ReaderID == like.ReaderID);
 
@@ -167,12 +234,18 @@ namespace BookSwap.Controllers
 
             return Ok("Reaction deleted successfully.");
         }
-        // Comment on a book
-        [HttpPost("comment/{bookPostId}")]
+        
+        [HttpPost("comment")]
         [Authorize]
-        public async Task<IActionResult> CommentOnBookPost(int bookPostId, [FromBody] Comment comment)
+        public async Task<IActionResult> CommentOnBookPost( [FromBody] CommentDTO DTO)
         {
-            var bookPost = await _context.BookPosts.FindAsync(bookPostId);
+            var comment = new Comment
+            {
+                ReaderID=DTO.ReaderID,
+                BookPostID = DTO.BookPostID,
+                Content = DTO.Content
+            };
+            var bookPost = await _context.BookPosts.FindAsync(comment.BookPostID);
             if (bookPost == null)
                 return NotFound("Book not found.");
 
@@ -182,7 +255,26 @@ namespace BookSwap.Controllers
             return Ok("Comment added successfully.");
         }
 
-       
+        [HttpPost("reply")]
+        [Authorize]
+        public async Task<IActionResult> ReolyOnComment([FromBody] ReplyDTO DTO)
+        {
+            var Reply = new Reply
+            {
+                ReaderID = DTO.ReaderID,
+                CommentID = DTO.CommentID,
+                Content = DTO.Content
+            };
+            var bookPost = await _context.Comments.FindAsync(Reply.CommentID);
+            if (bookPost == null)
+                return NotFound("Comment not found.");
+
+            _context.Replies.Add(Reply);
+            await _context.SaveChangesAsync();
+
+            return Ok("Comment added successfully.");
+        }
+
         private string HashPassword(string password)
         {
             var key = Encoding.UTF8.GetBytes("Your_Secret_Key");

@@ -6,6 +6,8 @@ namespace BookSwap.Models
     public class Like
     {
         [Key]
+        [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+
         public int LikeID { get; set; }
         [ForeignKey("Reader")]
         [Required]

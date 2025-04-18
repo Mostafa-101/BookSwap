@@ -1,4 +1,5 @@
 ﻿using BookSwap.Data.Contexts;
+using BookSwap.DTOS;
 using BookSwap.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -111,10 +112,18 @@ public class AdminController : ControllerBase
     // -------------------- BookOwner Management --------------------
 
     [HttpGet("ManageBookOwners")]
-    public async Task<ActionResult<IEnumerable<BookOwner>>> GetPendingBookOwners()
+    public async Task<ActionResult<IEnumerable<BookOwnerDTOResponse>>> GetPendingBookOwners()
     {
         var pendingBookOwners = await _context.BookOwners
             .Where(b => b.RequestStatus == "Pending")
+            .Select(b => new BookOwnerDTOResponse
+            {
+                BookOwnerName = b.BookOwnerName,
+                ssn = b.ssn,
+                RequestStatus = b.RequestStatus,
+                Email = b.Email,
+                PhoneNumber = b.PhoneNumber
+            })
             .ToListAsync();
 
         if (pendingBookOwners == null || !pendingBookOwners.Any())
@@ -148,10 +157,24 @@ public class AdminController : ControllerBase
         return Ok($"Book Owner {action}d.");
     }
     [HttpGet("ManageBookPosts")]
-    public async Task<ActionResult<IEnumerable<BookPost>>> GetPendingBookPosts()
+    public async Task<ActionResult<IEnumerable<BookPostDTO>>> GetPendingBookPosts()
     {
         var pendingBookPosts = await _context.BookPosts
             .Where(b => b.PostStatus == "Pending")
+            .Select(b => new BookPostDTO
+            {
+                BookOwnerID = b.BookOwnerID,
+                Title = b.Title,
+                Genre = b.Genre,
+                ISBN = b.ISBN,
+                Description = b.Description,
+                Language = b.Language,
+                PublicationDate = b.PublicationDate,
+                StartDate = b.StartDate,
+                EndDate = b.EndDate,
+                Price = b.Price
+                // CoverPhoto is not included as it is not stored in the model
+            })
             .ToListAsync();
 
         if (pendingBookPosts == null || !pendingBookPosts.Any())

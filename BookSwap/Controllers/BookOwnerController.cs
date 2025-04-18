@@ -21,19 +21,25 @@ public class BookOwnerController : ControllerBase
         _context = context;
         _secretKey = configuration["Jwt:Key"];
     }
-
     [AllowAnonymous]
     [HttpPost("signup")]
-    public async Task<IActionResult> SignUp([FromBody] BookOwner bookOwner)
+    public async Task<IActionResult> SignUp([FromBody] BookOwnerDTO bookOwnerDto)
     {
         var exists = await _context.BookOwners
-            .AnyAsync(b => b.BookOwnerName == bookOwner.BookOwnerName);
+            .AnyAsync(b => b.BookOwnerName == bookOwnerDto.BookOwnerName);
 
         if (exists)
             return BadRequest("BookOwner already exists.");
 
-        bookOwner.Password = HashPassword(bookOwner.Password);
-        bookOwner.RequestStatus = "Pending";
+        var bookOwner = new BookOwner
+        {
+            BookOwnerName = bookOwnerDto.BookOwnerName,
+            Password = HashPassword(bookOwnerDto.Password),
+            ssn = bookOwnerDto.ssn,
+            RequestStatus = "Pending",
+            Email = bookOwnerDto.Email,
+            PhoneNumber = bookOwnerDto.PhoneNumber
+        };
 
         _context.BookOwners.Add(bookOwner);
         await _context.SaveChangesAsync();
@@ -137,6 +143,115 @@ public class BookOwnerController : ControllerBase
         await _context.SaveChangesAsync();
 
         return NoContent();
+    }
+    [HttpPost("respond")]
+    public async Task<IActionResult> RespondToBookRequest([FromBody] BookRequestResponseDTO responseDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        // Find the book request
+        var bookRequest = await _context.BookRequests
+            .Include(br => br.BookPost)
+            .ThenInclude(bp => bp.BookOwner)
+            .FirstOrDefaultAsync(br => br.RequsetID == responseDto.RequsetID);
+
+        if (bookRequest == null)
+        {
+            return NotFound(new { message = "Book request not found" });
+        }
+
+        // Verify the book post and reader match the DTO
+        if (bookRequest.BookPostID != responseDto.BookPostID || bookRequest.ReaderID != responseDto.ReaderID)
+        {
+            return BadRequest(new { message = "Book post or reader ID mismatch" });
+        }
+
+        // Verify the book is not already borrowed
+        if (bookRequest.BookPost.PostStatus.ToLower() == "borrowed")
+        {
+            return BadRequest(new { message = "Book is already borrowed" });
+        }
+
+        // Validate request status
+        var validStatuses = new[] { "Accepted", "Rejected" };
+        if (!validStatuses.Contains(responseDto.RequsetStatus))
+        {
+            return BadRequest(new { message = "Invalid request status. Must be 'Accepted' or 'Rejected'" });
+        }
+
+        // Verify the book owner is authorized (assuming the owner ID is available via authentication)
+        // Note: In a real application, you'd get the owner ID from the authenticated user context
+        var bookOwnerId = bookRequest.BookPost.BookOwnerID;
+        if (bookRequest.BookPost.BookOwnerID != bookOwnerId)
+        {
+            return Unauthorized(new { message = "Only the book owner can respond to this request" });
+        }
+
+        // Update the book request status
+        bookRequest.RequsetStatus = responseDto.RequsetStatus;
+
+        // Update book post status based on the response
+        bookRequest.BookPost.PostStatus = responseDto.RequsetStatus == "Accepted" ? "Borrowed" : "Available";
+
+        try
+        {
+            _context.BookRequests.Update(bookRequest);
+            _context.BookPosts.Update(bookRequest.BookPost);
+            await _context.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = $"Book request {responseDto.RequsetStatus.ToLower()} successfully",
+                requestId = bookRequest.RequsetID,
+                bookPostId = bookRequest.BookPostID
+            });
+        }
+        catch (DbUpdateException ex)
+        {
+            return StatusCode(500, new { message = "Error processing request response", error = ex.Message });
+        }
+    }
+    [HttpGet("owner/")]
+    public async Task<IActionResult> GetBookRequestsForOwner(int bookOwnerId)
+    {
+        // Verify book owner exists
+        var bookOwner = await _context.BookOwners
+            .FirstOrDefaultAsync(bo => bo.BookOwnerID == bookOwnerId);
+
+        if (bookOwner == null)
+        {
+            return NotFound(new { message = "Book owner not found" });
+        }
+
+        // Fetch all book requests for books owned by this owner and map to DTO
+        var bookRequests = await _context.BookRequests
+            .Include(br => br.BookPost)
+            .Include(br => br.Reader)
+            .Where(br => br.BookPost.BookOwnerID == bookOwnerId)
+            .Select(br => new GetBookRequestsDTO
+            {
+                RequsetID = br.RequsetID,
+                BookPostID = br.BookPostID,
+                BookTitle = br.BookPost.Title,
+                ReaderID = br.ReaderID,
+                ReaderName = br.Reader.ReaderName,
+                RequsetStatus = br.RequsetStatus
+            })
+            .ToListAsync();
+
+        if (!bookRequests.Any())
+        {
+            return Ok(new { message = "No book requests found for this owner", requests = new List<GetBookRequestsDTO>() });
+        }
+
+        return Ok(new
+        {
+            message = "Book requests retrieved successfully",
+            requests = bookRequests
+        });
     }
 
     private string HashPassword(string password)

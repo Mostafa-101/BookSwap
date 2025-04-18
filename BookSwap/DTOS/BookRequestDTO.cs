@@ -10,6 +10,5 @@ namespace BookSwap.DTOS
         
         public int ReaderID { get; set; }
 
-        public string RequsetStatus { get; set; }
     }
 }

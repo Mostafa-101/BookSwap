@@ -1,6 +1,7 @@
 ﻿using BookSwap.Data.Contexts;
 using BookSwap.DTOS;
 using BookSwap.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -66,26 +67,60 @@ namespace BookSwap.Controllers
                     CoverPhoto = bp.CoverPhoto != null ? Convert.ToBase64String(bp.CoverPhoto) : null,
                     TotalLikes = bp.Likes.Count(l => l.IsLike),
                     TotalDislikes = bp.Likes.Count(l => !l.IsLike),
-                    Comments = bp.Comments.Select(c => new CommentDto
-                    {
-                        CommentID = c.CommentID,
-                        ReaderID = c.ReaderID,
-                        ReaderName = c.Reader.ReaderName,
-                        Content = c.Content,
-                        Replies = c.Replies.Select(r => new ReplyDto
-                        {
-                            ReplyID = r.ReplyID,
-                            CommentID = r.CommentID,
-                            ReaderID = r.ReaderID,
-                            ReaderName = r.Reader.ReaderName,
-                            Content = r.Content
-                        }).ToList()
-                    }).ToList()
+                   
                 })
                 .ToListAsync();
 
             return Ok(bookPosts);
         }
+        [HttpGet("comments/{postId}")]
+        public async Task<IActionResult> GetCommentsOnBookPost
+            (int postId)
+        {
+            var comments = await _db.Comments
+                .Where(c => c.BookPostID == postId)
+                .ToListAsync();
+
+            var readerIds = comments.Select(c => c.ReaderID).ToList();
+
+            var commentIds = comments.Select(c => c.CommentID).ToList();
+            var replies = await _db.Replies
+                .Where(r => commentIds.Contains(r.CommentID))
+                .ToListAsync();
+
+            readerIds.AddRange(replies.Select(r => r.ReaderID));
+            readerIds = readerIds.Distinct().ToList();
+
+            var readers = await _db.Readers
+                .Where(r => readerIds.Contains(r.ReaderID))
+                .ToDictionaryAsync(r => r.ReaderID, r => r.ReaderName);
+
+            var repliesGrouped = replies
+                .GroupBy(r => r.CommentID)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(r => new ReplyResponseDTO
+                    {
+                        ReplyID = r.ReplyID,
+                        ReaderID = r.ReaderID,
+                        ReaderName = readers.ContainsKey(r.ReaderID) ? readers[r.ReaderID] : "Unknown",
+                        Content = r.Content
+                    }).ToList()
+                );
+
+            var result = comments.Select(c => new CommentResponseDTO
+            {
+                CommentID = c.CommentID,
+                ReaderID = c.ReaderID,
+                ReaderName = readers.ContainsKey(c.ReaderID) ? readers[c.ReaderID] : "Unknown",
+                Content = c.Content,
+                Replies = repliesGrouped.ContainsKey(c.CommentID) ? repliesGrouped[c.CommentID] : new List<ReplyResponseDTO>()
+            }).ToList();
+
+            return Ok(result);
+        }
+
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteBookPost(int id)
         {
@@ -175,21 +210,7 @@ namespace BookSwap.Controllers
                     CoverPhoto = bp.CoverPhoto != null ? Convert.ToBase64String(bp.CoverPhoto) : null,
                     TotalLikes = bp.Likes.Count(l => l.IsLike),
                     TotalDislikes = bp.Likes.Count(l => !l.IsLike),
-                    Comments = bp.Comments.Select(c => new CommentDto
-                    {
-                        CommentID = c.CommentID,
-                        ReaderID = c.ReaderID,
-                        ReaderName = c.Reader.ReaderName,
-                        Content = c.Content,
-                        Replies = c.Replies.Select(r => new ReplyDto
-                        {
-                            ReplyID = r.ReplyID,
-                            CommentID = r.CommentID,
-                            ReaderID = r.ReaderID,
-                            ReaderName = r.Reader.ReaderName,
-                            Content = r.Content
-                        }).ToList()
-                    }).ToList()
+                  
                 })
                 .ToListAsync();
 

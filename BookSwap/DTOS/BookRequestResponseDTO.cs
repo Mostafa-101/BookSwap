@@ -3,14 +3,13 @@ using System.ComponentModel.DataAnnotations;
 
 namespace BookSwap.DTOS
 {
-    public class ReplyDTO
+    public class BookRequestResponseDTO
     {
-        public int CommentID { get; set; }
+        public int RequsetID { get; set; }
 
-     
-
+        public int BookPostID { get; set; }    
         public int ReaderID { get; set; }
 
-        public string Content { get; set; }
+        public string RequsetStatus { get; set; }
     }
 }
