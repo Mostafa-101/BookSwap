@@ -4,6 +4,7 @@ using BookSwap.Data.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BookSwap.Migrations
 {
     [DbContext(typeof(BookSwapDbContext))]
-    partial class BookSwapDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250418192340_RefreshTokens")]
+    partial class RefreshTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -245,10 +248,10 @@ namespace BookSwap.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AdminId")
+                    b.Property<string>("AdminName")
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<int?>("BookOwnerId")
+                    b.Property<int>("BookOwnerID")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("Created")
@@ -256,9 +259,6 @@ namespace BookSwap.Migrations
 
                     b.Property<DateTime>("Expires")
                         .HasColumnType("datetime2");
-
-                    b.Property<int?>("ReaderId")
-                        .HasColumnType("int");
 
                     b.Property<string>("Token")
                         .IsRequired()
@@ -274,11 +274,9 @@ namespace BookSwap.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AdminId");
+                    b.HasIndex("AdminName");
 
-                    b.HasIndex("BookOwnerId");
-
-                    b.HasIndex("ReaderId");
+                    b.HasIndex("BookOwnerID");
 
                     b.ToTable("RefreshTokens");
                 });
@@ -382,21 +380,17 @@ namespace BookSwap.Migrations
                 {
                     b.HasOne("BookSwap.Models.Admin", "Admin")
                         .WithMany("RefreshTokens")
-                        .HasForeignKey("AdminId");
+                        .HasForeignKey("AdminName");
 
                     b.HasOne("BookSwap.Models.BookOwner", "BookOwner")
                         .WithMany("RefreshTokens")
-                        .HasForeignKey("BookOwnerId");
-
-                    b.HasOne("BookSwap.Models.Reader", "Reader")
-                        .WithMany("RefreshTokens")
-                        .HasForeignKey("ReaderId");
+                        .HasForeignKey("BookOwnerID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Admin");
 
                     b.Navigation("BookOwner");
-
-                    b.Navigation("Reader");
                 });
 
             modelBuilder.Entity("BookSwap.Models.Reply", b =>
@@ -451,8 +445,6 @@ namespace BookSwap.Migrations
                     b.Navigation("Comments");
 
                     b.Navigation("Likes");
-
-                    b.Navigation("RefreshTokens");
                 });
 #pragma warning restore 612, 618
         }

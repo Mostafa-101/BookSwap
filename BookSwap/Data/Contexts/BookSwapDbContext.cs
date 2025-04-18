@@ -22,7 +22,6 @@ namespace BookSwap.Data.Contexts
         public DbSet<Comment> Comments { get; set; }
         public DbSet<Like> Likes { get; set; }
         public DbSet<Reply> Replies { get; set; }
-
-
+        public DbSet<RefreshToken> RefreshTokens { get; set; }
     }
 }

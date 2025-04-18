@@ -4,6 +4,7 @@ using BookSwap.Data.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BookSwap.Migrations
 {
     [DbContext(typeof(BookSwapDbContext))]
-    partial class BookSwapDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250418213410_RefreshToken2")]
+    partial class RefreshToken2
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -245,10 +248,10 @@ namespace BookSwap.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AdminId")
+                    b.Property<string>("AdminName")
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<int?>("BookOwnerId")
+                    b.Property<int>("BookOwnerID")
                         .HasColumnType("int");
 
                     b.Property<DateTime>("Created")
@@ -257,7 +260,7 @@ namespace BookSwap.Migrations
                     b.Property<DateTime>("Expires")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("ReaderId")
+                    b.Property<int>("ReaderID")
                         .HasColumnType("int");
 
                     b.Property<string>("Token")
@@ -274,11 +277,11 @@ namespace BookSwap.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AdminId");
+                    b.HasIndex("AdminName");
 
-                    b.HasIndex("BookOwnerId");
+                    b.HasIndex("BookOwnerID");
 
-                    b.HasIndex("ReaderId");
+                    b.HasIndex("ReaderID");
 
                     b.ToTable("RefreshTokens");
                 });
@@ -382,15 +385,19 @@ namespace BookSwap.Migrations
                 {
                     b.HasOne("BookSwap.Models.Admin", "Admin")
                         .WithMany("RefreshTokens")
-                        .HasForeignKey("AdminId");
+                        .HasForeignKey("AdminName");
 
                     b.HasOne("BookSwap.Models.BookOwner", "BookOwner")
                         .WithMany("RefreshTokens")
-                        .HasForeignKey("BookOwnerId");
+                        .HasForeignKey("BookOwnerID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.HasOne("BookSwap.Models.Reader", "Reader")
                         .WithMany("RefreshTokens")
-                        .HasForeignKey("ReaderId");
+                        .HasForeignKey("ReaderID")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Admin");
 

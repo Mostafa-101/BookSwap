@@ -79,26 +79,48 @@ namespace BookSwap.Controllers
 
             // Generate JWT token
             var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_secretKey); 
-
+            var key = Encoding.ASCII.GetBytes(_secretKey);
             var tokenDescriptor = new SecurityTokenDescriptor
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-                    new Claim("name", existing.ReaderName),
-                    new Claim("role", "Reader"),
-                    new Claim("readerId", existing.ReaderID.ToString()) // Optional: Include ReaderID for use in other APIs
-                }),
+            new Claim("name", existing.ReaderName),
+            new Claim("role", "Reader"),
+            new Claim("readerId", existing.ReaderID.ToString())
+        }),
                 Expires = DateTime.UtcNow.AddHours(2),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(key),
                     SecurityAlgorithms.HmacSha256Signature),
-                Issuer=_issuer,
+                Issuer = _issuer,
                 Audience = _Audience
-            };  
-
+            };
             var token = tokenHandler.CreateToken(tokenDescriptor);
             var tokenString = tokenHandler.WriteToken(token);
+
+            // Generate and store refresh token
+            var refreshToken = PasswordService.GenerateRefreshToken();
+            var refreshTokenEntity = new RefreshToken
+            {
+                Token = refreshToken,
+                Expires = DateTime.UtcNow.AddDays(7),
+                Created = DateTime.UtcNow,
+                UserId = existing.ReaderID.ToString(), // Using ReaderID as UserId
+                UserType = "Reader",
+                ReaderId = existing.ReaderID
+            };
+
+            _context.RefreshTokens.Add(refreshTokenEntity);
+            await _context.SaveChangesAsync();
+
+            // Set refresh token in HTTP-only cookie
+            Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Strict,
+                Expires = refreshTokenEntity.Expires
+            });
 
             // Return token and reader details
             return Ok(new
