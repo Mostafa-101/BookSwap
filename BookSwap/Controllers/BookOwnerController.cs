@@ -56,6 +56,7 @@ public class BookOwnerController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("login")]
+
     public async Task<IActionResult> Login([FromBody] BookOwnerLoginDTO bookOwnerDTO)
     {
         // Validate input
@@ -120,6 +121,7 @@ public class BookOwnerController : ControllerBase
     }
     [HttpPost]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> CreateBookPost([FromForm] BookPostDTO dto)
     {
         using var stream = new MemoryStream();
@@ -145,6 +147,7 @@ public class BookOwnerController : ControllerBase
     }
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpDelete("{id}")]
+
     public async Task<IActionResult> DeleteBookPost(int id)
     {
         var post = await _context.BookPosts.FindAsync(id);
@@ -167,7 +170,7 @@ public class BookOwnerController : ControllerBase
 
     [HttpPut("{id}")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-
+    [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> UpdateBookPost(int id, [FromForm] BookPostDTO dto)
     {
         var post = await _context.BookPosts.FindAsync(id);
@@ -247,8 +250,9 @@ public class BookOwnerController : ControllerBase
     //     return NoContent();
     // }
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-
     [HttpPost("respond")]
+    [Authorize(Roles = "BookOwner")]
+
     public async Task<IActionResult> RespondToBookRequest([FromBody] BookRequestResponseDTO responseDto)
     {
         if (!ModelState.IsValid)
@@ -320,6 +324,8 @@ public class BookOwnerController : ControllerBase
     }
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpGet("owner/")]
+    [Authorize(Roles = "BookOwner")]
+
     public async Task<IActionResult> GetBookRequestsForOwner(int bookOwnerId)
     {
         // Verify book owner exists

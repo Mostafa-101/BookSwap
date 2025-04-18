@@ -13,7 +13,7 @@ using System.Text;
 
 [ApiController]
 [Route("api/admin")]
-//[Authorize(Roles = "Admin")]
+
 public class AdminController : ControllerBase
 {
     private readonly BookSwapDbContext _context;
@@ -118,7 +118,7 @@ public class AdminController : ControllerBase
       */
     // -------------------- BookOwner Management --------------------
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-
+    [Authorize(Roles = "Admin")]
     [HttpGet("ManageBookOwners")]
     public async Task<ActionResult<IEnumerable<BookOwnerDTOResponse>>> GetPendingBookOwners()
     {
@@ -138,7 +138,7 @@ public class AdminController : ControllerBase
         return Ok(pendingBookOwners);
     }
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-
+    [Authorize(Roles = "Admin")]
     [HttpPut("ProcessBookOwner/{id}")]
     public async Task<IActionResult> ProcessBookOwner(int id, [FromQuery] string action)
     {
@@ -166,7 +166,7 @@ public class AdminController : ControllerBase
     }
     [HttpGet("ManageBookPosts")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-
+    [Authorize(Roles = "Admin")]
     public async Task<ActionResult<IEnumerable<BookPostResponseDto>>> GetPendingBookPosts()
     {
         var pendingBookPosts = await _context.BookPosts
@@ -195,6 +195,7 @@ public class AdminController : ControllerBase
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 
     [HttpPut("ProcessBookPosts/{id}")]
+    [Authorize(Roles = "Admin")]
     public async Task<IActionResult> ProcessBookPosts(int id, [FromQuery] string action)
     {
         var BookPost = await _context.BookPosts.FindAsync(id);

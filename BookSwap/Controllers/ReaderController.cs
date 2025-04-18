@@ -115,6 +115,7 @@ namespace BookSwap.Controllers
 
 
         // Get all readers
+        [Authorize(Roles = "Reader")]
         [HttpGet("all")]
         //[Authorize(Roles = "Admin")] // Only Admin can view all readers
         public async Task<IActionResult> GetAllReaders()
@@ -132,6 +133,7 @@ namespace BookSwap.Controllers
         // Apply to borrow a book
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPost("borrow")]
+        [Authorize(Roles = "Reader")]
         public async Task<IActionResult> BorrowBook([FromBody] BookRequestDTO requestDto)
         {
             if (!ModelState.IsValid)
@@ -191,6 +193,7 @@ namespace BookSwap.Controllers
             }
         }
         [HttpPost("return")]
+        [Authorize(Roles = "Reader")]
         public async Task<ActionResult<BookRequestResponseDTO>> ReturnBook([FromBody] BookRequestResponseDTO requestDto)
         {
             // Validate input DTO
@@ -251,6 +254,7 @@ namespace BookSwap.Controllers
             return Ok(response);
         }
         [HttpGet("user/{readerId}")]
+        [Authorize(Roles = "Reader")]
         public async Task<ActionResult<IEnumerable<BookRequestWithTitleResponseDTO>>> GetBookRequestsForUser(int readerId)
         {
             // Check if reader exists
@@ -283,7 +287,7 @@ namespace BookSwap.Controllers
         }
         // Like a book
         [HttpPost("like")]
-        [Authorize]
+        [Authorize(Roles = "Reader")]
         public async Task<IActionResult> LikeOrDislikeBook([FromBody] LikeDTO DTO)
         {
             var like = new Like
@@ -303,7 +307,7 @@ namespace BookSwap.Controllers
             return Ok(like.IsLike ? "Book liked successfully." : "Book disliked successfully.");
         }
         [HttpPut("like")]
-        [Authorize]
+        [Authorize(Roles = "Reader")]
         public async Task<IActionResult> ToggleReaction([FromBody] LikeDTO DTO)
         {
             var like = new Like
@@ -324,7 +328,7 @@ namespace BookSwap.Controllers
             return Ok(reaction.IsLike ? "Changed to like successfully." : "Changed to dislike successfully.");
         }
         [HttpDelete("like")]
-        [Authorize]
+        [Authorize(Roles = "Reader")]
         public async Task<IActionResult> DeleteReaction([FromBody] LikeDTO DTO)
         {
             var like = new Like
@@ -346,7 +350,7 @@ namespace BookSwap.Controllers
         }
         
         [HttpPost("comment")]
-        [Authorize]
+        [Authorize(Roles = "Reader")]
         public async Task<IActionResult> CommentOnBookPost( [FromBody] CommentDTO DTO)
         {
             var comment = new Comment
@@ -366,7 +370,7 @@ namespace BookSwap.Controllers
         }
 
         [HttpPost("reply")]
-        [Authorize]
+        [Authorize(Roles = "Reader")]
         public async Task<IActionResult> ReolyOnComment([FromBody] ReplyDTO DTO)
         {
             var Reply = new Reply
