@@ -56,7 +56,6 @@ public class BookOwnerController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("login")]
-
     public async Task<IActionResult> Login([FromBody] BookOwnerLoginDTO bookOwnerDTO)
     {
         // Validate input
@@ -67,7 +66,7 @@ public class BookOwnerController : ControllerBase
 
         // Find book owner by BookOwnerName
         var existing = await _context.BookOwners
-           .FirstOrDefaultAsync(b => b.BookOwnerName == bookOwnerDTO.BookOwnerName);
+            .FirstOrDefaultAsync(b => b.BookOwnerName == bookOwnerDTO.BookOwnerName);
 
         if (existing == null || !PasswordService.VerifyPassword(bookOwnerDTO.Password, existing.Password))
         {
@@ -84,18 +83,17 @@ public class BookOwnerController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, new { message = "Your account is not approved." });
         }
 
-        // Generate JWT token
+        // Generate JWT access token
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.ASCII.GetBytes(_secretKey);
-
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new ClaimsIdentity(new[]
             {
-                    new Claim("name", existing.BookOwnerName),
-                    new Claim("role", "BookOwner"),
-                    new Claim("bookOwnerId", existing.BookOwnerID.ToString()) // Optional: Include BookOwnerID for other APIs
-                }),
+           new Claim("name", existing.BookOwnerName),
+           new Claim("role", "BookOwner"),
+           new Claim("bookOwnerId", existing.BookOwnerID.ToString())
+       }),
             Expires = DateTime.UtcNow.AddHours(2),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
@@ -103,9 +101,32 @@ public class BookOwnerController : ControllerBase
             Issuer = _issuer,
             Audience = _Audience
         };
-
         var token = tokenHandler.CreateToken(tokenDescriptor);
         var tokenString = tokenHandler.WriteToken(token);
+
+        // Generate and store refresh token
+        var refreshToken = PasswordService.GenerateRefreshToken();
+        var refreshTokenEntity = new RefreshToken
+        {
+            Token = refreshToken,
+            Expires = DateTime.UtcNow.AddDays(7),
+            Created = DateTime.UtcNow,
+            UserId = existing.BookOwnerID.ToString(), // Using BookOwnerID as UserId
+            UserType = "BookOwner",
+            BookOwnerId = existing.BookOwnerID
+        };
+
+        _context.RefreshTokens.Add(refreshTokenEntity);
+        await _context.SaveChangesAsync();
+
+        // Set refresh token in HTTP-only cookie
+        Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = refreshTokenEntity.Expires
+        });
 
         // Return token and book owner details
         return Ok(new

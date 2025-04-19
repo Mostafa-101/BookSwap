@@ -1,4 +1,5 @@
 ﻿using BCrypt.Net;
+using System.Security.Cryptography;
 
 namespace BookSwap.Controllers
 {
@@ -29,6 +30,16 @@ namespace BookSwap.Controllers
             }
 
             return BCrypt.Net.BCrypt.Verify(inputPassword, storedPasswordHash);
+        }
+
+        public static string GenerateRefreshToken()
+        {
+            var randomNumber = new byte[32];
+            using (var rng = RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(randomNumber);
+                return Convert.ToBase64String(randomNumber);
+            }
         }
     }
 }

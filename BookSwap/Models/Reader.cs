@@ -28,5 +28,6 @@ namespace BookSwap.Models
         public List<Like> Likes { get; set; }
         public List<Comment> Comments { get; set; }
         public List<BookRequest> BookRequests { get; set; }
+        public List<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     }
 }

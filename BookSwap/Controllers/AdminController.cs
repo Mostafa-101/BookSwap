@@ -32,8 +32,9 @@ public class AdminController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("signup")]
-    public async Task<IActionResult> SignUp([FromBody] Admin admin)
+    public async Task<IActionResult> SignUp([FromBody] AdminDTO DTO)
     {
+        var admin = new Admin { AdminName = DTO.AdminName, PasswordHash = DTO.PasswordHash };
         var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
         if (existingAdmin != null) return BadRequest("Admin already exists.");
 
@@ -46,22 +47,23 @@ public class AdminController : ControllerBase
 
     [AllowAnonymous]
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] Admin admin)
+    public async Task<IActionResult> Login([FromBody] AdminDTO DTO)
     {
+        var admin = new Admin { AdminName = DTO.AdminName, PasswordHash = DTO.PasswordHash };
         var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
         if (existingAdmin == null || !PasswordService.VerifyPassword(admin.PasswordHash, existingAdmin.PasswordHash))
             return Unauthorized(new { message = "Invalid credentials." });
 
+        // Generate JWT access token
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.ASCII.GetBytes(_secretKey);
-
         var tokenDescriptor = new SecurityTokenDescriptor
         {
             Subject = new System.Security.Claims.ClaimsIdentity(new[]
             {
-                new System.Security.Claims.Claim("name", existingAdmin.AdminName),
-                new System.Security.Claims.Claim("role", "Admin")
-            }),
+           new System.Security.Claims.Claim("name", existingAdmin.AdminName),
+           new System.Security.Claims.Claim("role", "Admin")
+       }),
             Expires = DateTime.UtcNow.AddHours(1),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
@@ -69,13 +71,35 @@ public class AdminController : ControllerBase
             Issuer = _issuer,
             Audience = _Audience
         };
-
         var token = tokenHandler.CreateToken(tokenDescriptor);
         var tokenString = tokenHandler.WriteToken(token);
 
+        // Generate and store refresh token
+        var refreshToken = PasswordService.GenerateRefreshToken();
+        var refreshTokenEntity = new RefreshToken
+        {
+            Token = refreshToken,
+            Expires = DateTime.UtcNow.AddDays(7),
+            Created = DateTime.UtcNow,
+            UserId = existingAdmin.AdminName, // Using AdminName as UserId
+            UserType = "Admin",
+            AdminName = existingAdmin.AdminName
+        };
+
+        _context.RefreshTokens.Add(refreshTokenEntity);
+        await _context.SaveChangesAsync();
+
+        // Set refresh token in HTTP-only cookie
+        Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = refreshTokenEntity.Expires
+        });
+
         return Ok(new { Token = tokenString });
     }
-
     /*  // -------------------- Admin CRUD --------------------
 
       [HttpGet("{adminName}")]

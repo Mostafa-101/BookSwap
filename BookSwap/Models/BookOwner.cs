@@ -28,5 +28,6 @@ namespace BookSwap.Models
         public string PhoneNumber { get; set; }
 
         public List<BookPost> BookPosts { get; set; } = new();
+        public List<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     }
 }

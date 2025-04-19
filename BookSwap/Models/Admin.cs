@@ -10,5 +10,6 @@ namespace BookSwap.Models
 
         [Required]
         public string PasswordHash { get; set; }  // تغيير من "Password" إلى "PasswordHash"
+        public List<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     }
 }
