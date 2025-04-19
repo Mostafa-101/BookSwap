@@ -42,10 +42,10 @@ public class BookOwnerController : ControllerBase
         {
             BookOwnerName = bookOwnerDto.BookOwnerName,
             Password = PasswordService.HashPassword(bookOwnerDto.Password),
-            ssn = bookOwnerDto.ssn,
+            EncryptedSsn = PasswordService.Encrypt(bookOwnerDto.ssn),
             RequestStatus = "Pending",
-            Email = bookOwnerDto.Email,
-            PhoneNumber = bookOwnerDto.PhoneNumber
+            EncryptedEmail = PasswordService.Encrypt(bookOwnerDto.Email),
+            EncryptedPhoneNumber = PasswordService.Encrypt(bookOwnerDto.PhoneNumber)
         };
 
         _context.BookOwners.Add(bookOwner);
@@ -136,7 +136,8 @@ public class BookOwnerController : ControllerBase
             {
                 existing.BookOwnerID,
                 existing.BookOwnerName,
-                existing.Email
+                Email = existing.GetDecryptedEmail(),
+                PhoneNumber = existing.GetDecryptedPhoneNumber()
             }
         });
     }

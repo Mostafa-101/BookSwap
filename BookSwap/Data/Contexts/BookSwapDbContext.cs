@@ -25,6 +25,5 @@ namespace BookSwap.Data.Contexts
 
         public DbSet<RefreshToken> RefreshTokens { get; set; }
 
-
     }
 }

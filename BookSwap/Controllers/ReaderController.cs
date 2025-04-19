@@ -135,20 +135,19 @@ namespace BookSwap.Controllers
             });
         }
 
-        // Get all readers
-        [Authorize(Roles = "Reader")]
-        [HttpGet("all")]
-        //[Authorize(Roles = "Admin")] // Only Admin can view all readers
-        public async Task<IActionResult> GetAllReaders()
-        {
-            var readers = await _context.Readers.ToListAsync();
+        //// Get all readers
+        //[Authorize(Roles = "Reader")]
+        //[HttpGet("all")]
+        ////[Authorize(Roles = "Admin")] // Only Admin can view all readers
+        //public async Task<IActionResult> GetAllReaders()
+        //{
+        //    var readers = await _context.Readers.ToListAsync();
 
-            if (readers.Count == 0)
-                return NotFound("No readers found.");
+        //    if (readers.Count == 0)
+        //        return NotFound("No readers found.");
 
-            return Ok(readers);
-        }
-
+        //    return Ok(readers);
+        //}
 
 
         // Apply to borrow a book

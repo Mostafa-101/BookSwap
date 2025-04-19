@@ -172,10 +172,11 @@ public class AdminController : ControllerBase
             {
                 BookOwnerID= b.BookOwnerID,
                 BookOwnerName = b.BookOwnerName,
-                ssn = b.ssn,
+                ssn = b.GetDecryptedSsn(),
                 RequestStatus = b.RequestStatus,
-                Email = b.Email,
-                PhoneNumber = b.PhoneNumber
+                Email = b.GetDecryptedEmail(),
+                PhoneNumber = b.GetDecryptedSsn()
+
             })
             .ToListAsync();
 

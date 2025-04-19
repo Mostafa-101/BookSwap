@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using BookSwap.Controllers;
 
 namespace BookSwap.Models
 {
@@ -16,16 +17,22 @@ namespace BookSwap.Models
         public string Password { get; set; }
 
         [Required]
-        public int ssn { get; set; }
+        public string EncryptedSsn { get; set; }
 
         [Required]
         public string RequestStatus { get; set; }
 
         [Required]
-        public string Email { get; set; }
+        public string EncryptedEmail { get; set; }
 
         [Required]
-        public string PhoneNumber { get; set; }
+        public string EncryptedPhoneNumber { get; set; }
+
+        // Helper methods to decrypt when needed
+        public string GetDecryptedSsn() => PasswordService.Decrypt(EncryptedSsn);
+        public string GetDecryptedEmail() => PasswordService.Decrypt(EncryptedEmail);
+        public string GetDecryptedPhoneNumber() => PasswordService.Decrypt(EncryptedPhoneNumber);
+
 
         public List<BookPost> BookPosts { get; set; } = new();
         public List<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
