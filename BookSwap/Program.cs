@@ -10,6 +10,12 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddCors(options => options.AddPolicy(name: "FrontendUI",
+    policy =>
+    {
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+    }
+));
 builder.Services.AddSwaggerGen(c =>
 {
     // Add security definition
@@ -58,7 +64,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+
 var app = builder.Build();
+app.UseCors("FrontendUI");
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
