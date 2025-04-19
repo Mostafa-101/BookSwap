@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -49,21 +50,31 @@ public class AdminController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] AdminDTO DTO)
     {
-        var admin = new Admin { AdminName = DTO.AdminName, PasswordHash = DTO.PasswordHash };
-        var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == admin.AdminName);
-        if (existingAdmin == null || !PasswordService.VerifyPassword(admin.PasswordHash, existingAdmin.PasswordHash))
+        // Validate input
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        // Find admin by AdminName
+        var existing = await _context.Admins
+            .FirstOrDefaultAsync(a => a.AdminName == DTO.AdminName);
+
+        if (existing == null || !PasswordService.VerifyPassword(DTO.PasswordHash, existing.PasswordHash))
+        {
             return Unauthorized(new { message = "Invalid credentials." });
+        }
 
         // Generate JWT access token
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.ASCII.GetBytes(_secretKey);
         var tokenDescriptor = new SecurityTokenDescriptor
         {
-            Subject = new System.Security.Claims.ClaimsIdentity(new[]
+            Subject = new ClaimsIdentity(new[]
             {
-           new System.Security.Claims.Claim("name", existingAdmin.AdminName),
-           new System.Security.Claims.Claim("role", "Admin")
-       }),
+            new Claim("name", existing.AdminName),
+            new Claim("role", "Admin")
+        }),
             Expires = DateTime.UtcNow.AddHours(1),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
@@ -81,9 +92,9 @@ public class AdminController : ControllerBase
             Token = refreshToken,
             Expires = DateTime.UtcNow.AddDays(7),
             Created = DateTime.UtcNow,
-            UserId = existingAdmin.AdminName, // Using AdminName as UserId
+            UserId = existing.AdminName, // Using AdminName as UserId
             UserType = "Admin",
-            AdminName = existingAdmin.AdminName
+            AdminName = existing.AdminName
         };
 
         _context.RefreshTokens.Add(refreshTokenEntity);
@@ -98,7 +109,16 @@ public class AdminController : ControllerBase
             Expires = refreshTokenEntity.Expires
         });
 
-        return Ok(new { Token = tokenString });
+        // Return token and admin details
+        return Ok(new
+        {
+            Token = tokenString,
+            User = new
+            {
+                AdminName = existing.AdminName,
+
+            }
+        });
     }
     /*  // -------------------- Admin CRUD --------------------
 

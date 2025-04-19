@@ -59,8 +59,8 @@ namespace BookSwap.Controllers
 
         // Reader login (generate JWT token)
         [AllowAnonymous]
-        [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] ReaderLoginDTO readerDTO)
+        [HttpPost("reader/login")]
+        public async Task<IActionResult> ReaderLogin([FromBody] ReaderLoginDTO readerDTO)
         {
             // Validate input
             if (!ModelState.IsValid)
@@ -77,7 +77,7 @@ namespace BookSwap.Controllers
                 return Unauthorized(new { message = "Invalid credentials." });
             }
 
-            // Generate JWT token
+            // Generate JWT access token
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(_secretKey);
             var tokenDescriptor = new SecurityTokenDescriptor
@@ -134,7 +134,6 @@ namespace BookSwap.Controllers
                 }
             });
         }
-
 
         // Get all readers
         [Authorize(Roles = "Reader")]
@@ -214,6 +213,144 @@ namespace BookSwap.Controllers
                 return StatusCode(500, new { message = "Error processing borrow request", error = ex.Message });
             }
         }
+ /*       [AllowAnonymous]
+        [HttpPost("refresh-token")]
+        public async Task<IActionResult> RefreshToken()
+        {
+            var refreshToken = Request.Cookies["refreshToken"];
+            if (string.IsNullOrEmpty(refreshToken))
+            {
+                return BadRequest(new { message = "Refresh token is missing." });
+            }
+
+            var refreshTokenEntity = await _context.RefreshTokens
+                .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
+
+            if (refreshTokenEntity == null)
+            {
+                return Unauthorized(new { message = "Invalid refresh token." });
+            }
+
+            if (refreshTokenEntity.IsExpired)
+            {
+                return Unauthorized(new { message = "Refresh token has expired." });
+            }
+
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(_secretKey);
+            SecurityTokenDescriptor tokenDescriptor = null;
+
+            switch (refreshTokenEntity.UserType)
+            {
+                case "Admin":
+                    var admin = await _context.Admins
+                        .FirstOrDefaultAsync(a => a.AdminName == refreshTokenEntity.AdminName);
+                    if (admin == null)
+                    {
+                        return Unauthorized(new { message = "Admin not found." });
+                    }
+                    tokenDescriptor = new SecurityTokenDescriptor
+                    {
+                        Subject = new ClaimsIdentity(new[]
+                        {
+                    new Claim("name", admin.AdminName),
+                    new Claim("role", "Admin")
+                }),
+                        Expires = DateTime.UtcNow.AddHours(1),
+                        SigningCredentials = new SigningCredentials(
+                            new SymmetricSecurityKey(key),
+                            SecurityAlgorithms.HmacSha256Signature),
+                        Issuer = _issuer,
+                        Audience = _Audience
+                    };
+                    break;
+
+                case "BookOwner":
+                    var bookOwner = await _context.BookOwners
+                        .FirstOrDefaultAsync(bo => bo.BookOwnerID == refreshTokenEntity.BookOwnerId);
+                    if (bookOwner == null)
+                    {
+                        return Unauthorized(new { message = "BookOwner not found." });
+                    }
+                    if (bookOwner.RequestStatus != "Approved")
+                    {
+                        return StatusCode(StatusCodes.Status403Forbidden, new { message = "Your account is not approved." });
+                    }
+                    tokenDescriptor = new SecurityTokenDescriptor
+                    {
+                        Subject = new ClaimsIdentity(new[]
+                        {
+                    new Claim("name", bookOwner.BookOwnerName),
+                    new Claim("role", "BookOwner"),
+                    new Claim("bookOwnerId", bookOwner.BookOwnerID.ToString())
+                }),
+                        Expires = DateTime.UtcNow.AddHours(2),
+                        SigningCredentials = new SigningCredentials(
+                            new SymmetricSecurityKey(key),
+                            SecurityAlgorithms.HmacSha256Signature),
+                        Issuer = _issuer,
+                        Audience = _Audience
+                    };
+                    break;
+
+                case "Reader":
+                    var reader = await _context.Readers
+                        .FirstOrDefaultAsync(r => r.ReaderID == refreshTokenEntity.ReaderId);
+                    if (reader == null)
+                    {
+                        return Unauthorized(new { message = "Reader not found." });
+                    }
+                    tokenDescriptor = new SecurityTokenDescriptor
+                    {
+                        Subject = new ClaimsIdentity(new[]
+                        {
+                    new Claim("name", reader.ReaderName),
+                    new Claim("role", "Reader"),
+                    new Claim("readerId", reader.ReaderID.ToString())
+                }),
+                        Expires = DateTime.UtcNow.AddHours(2),
+                        SigningCredentials = new SigningCredentials(
+                            new SymmetricSecurityKey(key),
+                            SecurityAlgorithms.HmacSha256Signature),
+                        Issuer = _issuer,
+                        Audience = _Audience
+                    };
+                    break;
+
+                default:
+                    return BadRequest(new { message = "Invalid user type." });
+            }
+
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            var tokenString = tokenHandler.WriteToken(token);
+
+            var newRefreshToken = PasswordService.GenerateRefreshToken();
+            var newRefreshTokenEntity = new RefreshToken
+            {
+                Token = newRefreshToken,
+                Expires = DateTime.UtcNow.AddDays(7),
+                Created = DateTime.UtcNow,
+                UserId = refreshTokenEntity.UserId,
+                UserType = refreshTokenEntity.UserType,
+                AdminName = refreshTokenEntity.AdminName,
+                BookOwnerId = refreshTokenEntity.BookOwnerId,
+                ReaderId = refreshTokenEntity.ReaderId
+            };
+
+            _context.RefreshTokens.Remove(refreshTokenEntity);
+            _context.RefreshTokens.Add(newRefreshTokenEntity);
+            await _context.SaveChangesAsync();
+
+            Response.Cookies.Append("refreshToken", newRefreshToken, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Strict,
+                Expires = newRefreshTokenEntity.Expires
+            });
+
+            return Ok(new { Token = tokenString });
+        }*/
         [HttpPost("return")]
         [Authorize(Roles = "Reader")]
         public async Task<ActionResult<BookRequestResponseDTO>> ReturnBook([FromBody] BookRequestResponseDTO requestDto)
