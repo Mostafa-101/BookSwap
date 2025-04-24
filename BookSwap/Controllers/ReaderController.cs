@@ -166,6 +166,39 @@ namespace BookSwap.Controllers
                 }
             });
         }
+
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+        [Authorize(Roles = "Reader")]
+        [HttpPut("UpdateReader/{id}")]
+        public IActionResult UpdateReader(int id, [FromBody] UpdateReaderDTO updatedReader)
+        {
+            var existingReader = _readerRepo.getById(id);
+
+            if (existingReader == null)
+            {
+                return NotFound("Reader not found.");
+            }
+
+            existingReader.ReaderName = updatedReader.ReaderName ?? existingReader.ReaderName;
+
+            if (!string.IsNullOrEmpty(updatedReader.Password))
+            {
+                existingReader.Password = PasswordService.HashPassword(updatedReader.Password);
+            }
+
+            existingReader.Email = updatedReader.Email ?? existingReader.Email;
+            existingReader.PhoneNumber = updatedReader.PhoneNumber ?? existingReader.PhoneNumber;
+
+            bool isUpdated = _readerRepo.update(existingReader);
+
+            if (!isUpdated)
+            {
+                return StatusCode(500, "Failed to update Reader.");
+            }
+
+            return Ok("Reader updated successfully.");
+        }
+
         //// Get all readers
         //[Authorize(Roles = "Reader")]
         //[HttpGet("all")]

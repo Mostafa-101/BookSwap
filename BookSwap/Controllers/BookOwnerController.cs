@@ -231,7 +231,7 @@ public async Task<IActionResult> DeleteBookPost(int id)
     return Ok($"BookPost with ID = {id} deleted successfully.");
 }
 
-    [HttpPut("{id}")]
+    [HttpPut("UpdateBookPost{id}")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> UpdateBookPost(int id, [FromForm] BookPostDTO dto)
@@ -268,6 +268,44 @@ public async Task<IActionResult> DeleteBookPost(int id)
 
         return Ok($"BookPost with ID = {id} updated successfully.");
     }
+
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [Authorize(Roles = "BookOwner")]
+    [HttpPut("UpdateBookOwner/{id}")]
+    public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] UpdateBookOwnerDTO updatedOwner)
+    {
+        var existingOwner = _BookOwnerRepo.getById(id);
+
+        if (existingOwner == null)
+        {
+            return NotFound("BookOwner not found.");
+        }
+
+        existingOwner.BookOwnerName = updatedOwner.BookOwnerName ?? existingOwner.BookOwnerName;
+        existingOwner.Password = string.IsNullOrEmpty(updatedOwner.Password)
+            ? existingOwner.Password
+            : PasswordService.HashPassword(updatedOwner.Password);
+        existingOwner.EncryptedSsn = string.IsNullOrEmpty(updatedOwner.ssn)
+            ? existingOwner.EncryptedSsn
+            : PasswordService.Encrypt(updatedOwner.ssn);
+        existingOwner.EncryptedEmail = updatedOwner.Email != null
+            ? PasswordService.Encrypt(updatedOwner.Email)
+            : existingOwner.EncryptedEmail;
+        existingOwner.EncryptedPhoneNumber = updatedOwner.PhoneNumber != null
+            ? PasswordService.Encrypt(updatedOwner.PhoneNumber)
+            : existingOwner.EncryptedPhoneNumber;
+
+        bool isUpdated = _BookOwnerRepo.update(existingOwner);
+
+        if (!isUpdated)
+        {
+            return StatusCode(500, "Failed to update BookOwner.");
+        }
+
+        return Ok("BookOwner updated successfully.");
+    }
+
+
     // //[Authorize(Roles = "Admin")]
     // [HttpGet]
     // public async Task<ActionResult<IEnumerable<BookOwner>>> GetBookOwners()
