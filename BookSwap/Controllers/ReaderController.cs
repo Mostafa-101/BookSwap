@@ -1,6 +1,7 @@
 ﻿using BookSwap.Data.Contexts;
 using BookSwap.DTOS;
 using BookSwap.Models;
+using BookSwap.Repos;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -23,13 +24,36 @@ namespace BookSwap.Controllers
         private readonly string _secretKey;
         private readonly string _issuer;
         private readonly string _Audience;
+        private readonly GenericRepo<Reader> _readerRepo;
+        private readonly GenericRepo<BookPost> _bookPostRepo;
+        private readonly GenericRepo<BookRequest> _bookRequestRepo;
+        private readonly GenericRepo<Like> _likeRepo;
+        private readonly GenericRepo<Comment> _commentRepo;
+        private readonly GenericRepo<Reply> _replyRepo;
+        private readonly GenericRepo<RefreshToken> _refreshTokenRepo;
 
-        public ReaderController(BookSwapDbContext context, IConfiguration configuration)
+        public ReaderController(
+            BookSwapDbContext context,
+            IConfiguration configuration,
+            GenericRepo<Reader> readerRepo,
+            GenericRepo<BookPost> bookPostRepo,
+            GenericRepo<BookRequest> bookRequestRepo,
+            GenericRepo<Like> likeRepo,
+            GenericRepo<Comment> commentRepo,
+            GenericRepo<Reply> replyRepo,
+            GenericRepo<RefreshToken> refreshTokenRepo)
         {
             _context = context;
             _secretKey = configuration["Jwt:Key"];
             _issuer = configuration["jwt:Issuer"];
             _Audience = configuration["jwt:Audience"];
+            _readerRepo = readerRepo;
+            _bookPostRepo = bookPostRepo;
+            _bookRequestRepo = bookRequestRepo;
+            _likeRepo = likeRepo;
+            _commentRepo = commentRepo;
+            _replyRepo = replyRepo;
+            _refreshTokenRepo = refreshTokenRepo;
         }
 
         // Reader sign up (registration)
@@ -37,8 +61,9 @@ namespace BookSwap.Controllers
         [HttpPost("signup")]
         public async Task<IActionResult> SignUp([FromBody] ReaderSignUpDTO readerDTO)
         {
-            var exists = await _context.Readers
-                .AnyAsync(r => r.ReaderName == readerDTO.ReaderName);
+            var exists = (await _readerRepo.getAllFilterAsync(
+                r => r.ReaderName == readerDTO.ReaderName
+            )).Any();
 
             if (exists)
                 return BadRequest("Reader already exists.");
@@ -51,8 +76,11 @@ namespace BookSwap.Controllers
                 PhoneNumber = readerDTO.PhoneNumber
             };
 
-            _context.Readers.Add(reader);
-            await _context.SaveChangesAsync();
+            bool added = _readerRepo.add(reader);
+            if (!added)
+            {
+                return StatusCode(500, new { message = "Error registering reader" });
+            }
 
             return Ok("Reader registered successfully.");
         }
@@ -69,8 +97,9 @@ namespace BookSwap.Controllers
             }
 
             // Find reader by ReaderName
-            var existing = await _context.Readers
-                .FirstOrDefaultAsync(r => r.ReaderName == readerDTO.ReaderName);
+            var existing = (await _readerRepo.getAllFilterAsync(
+                r => r.ReaderName == readerDTO.ReaderName
+            )).FirstOrDefault();
 
             if (existing == null || !PasswordService.VerifyPassword(readerDTO.Password, existing.Password))
             {
@@ -84,10 +113,10 @@ namespace BookSwap.Controllers
             {
                 Subject = new ClaimsIdentity(new[]
                 {
-            new Claim("name", existing.ReaderName),
-            new Claim("role", "Reader"),
-            new Claim("readerId", existing.ReaderID.ToString())
-        }),
+                    new Claim("name", existing.ReaderName),
+                    new Claim("role", "Reader"),
+                    new Claim("readerId", existing.ReaderID.ToString())
+                }),
                 Expires = DateTime.UtcNow.AddHours(2),
                 SigningCredentials = new SigningCredentials(
                     new SymmetricSecurityKey(key),
@@ -105,13 +134,16 @@ namespace BookSwap.Controllers
                 Token = refreshToken,
                 Expires = DateTime.UtcNow.AddDays(7),
                 Created = DateTime.UtcNow,
-                UserId = existing.ReaderID.ToString(), // Using ReaderID as UserId
+                UserId = existing.ReaderID.ToString(),
                 UserType = "Reader",
                 ReaderId = existing.ReaderID
             };
 
-            _context.RefreshTokens.Add(refreshTokenEntity);
-            await _context.SaveChangesAsync();
+            bool tokenAdded = _refreshTokenRepo.add(refreshTokenEntity);
+            if (!tokenAdded)
+            {
+                return StatusCode(500, new { message = "Error storing refresh token" });
+            }
 
             // Set refresh token in HTTP-only cookie
             Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
@@ -134,7 +166,6 @@ namespace BookSwap.Controllers
                 }
             });
         }
-
         //// Get all readers
         //[Authorize(Roles = "Reader")]
         //[HttpGet("all")]
@@ -162,8 +193,7 @@ namespace BookSwap.Controllers
             }
 
             // Verify book post exists and is available
-            var bookPost = await _context.BookPosts
-                .FirstOrDefaultAsync(bp => bp.BookPostID == requestDto.BookPostID);
+            var bookPost =  _bookPostRepo.getById(requestDto.BookPostID);
 
             if (bookPost == null)
             {
@@ -176,8 +206,7 @@ namespace BookSwap.Controllers
             }
 
             // Verify reader exists
-            var reader = await _context.Readers
-                .FirstOrDefaultAsync(r => r.ReaderID == requestDto.ReaderID);
+            var reader =  _readerRepo.getById(requestDto.ReaderID);
 
             if (reader == null)
             {
@@ -189,181 +218,187 @@ namespace BookSwap.Controllers
             {
                 BookPostID = requestDto.BookPostID,
                 ReaderID = requestDto.ReaderID,
-                RequsetStatus = "Pending", // Initial status
+                RequsetStatus = "Pending",
                 BookPost = bookPost,
                 Reader = reader
             };
 
-
             try
             {
-                _context.BookRequests.Add(bookRequest);
-                _context.BookPosts.Update(bookPost);
-                await _context.SaveChangesAsync();
+                bool requestAdded = _bookRequestRepo.add(bookRequest);
+                bool postUpdated = _bookPostRepo.update(bookPost);
 
-                return Ok(new
+                if (requestAdded && postUpdated)
                 {
-                    message = "Borrow request created successfully",
-                    requestId = bookRequest.RequsetID
-                });
+                    return Ok(new
+                    {
+                        message = "Borrow request created successfully",
+                        requestId = bookRequest.RequsetID
+                    });
+                }
+                else
+                {
+                    return StatusCode(500, new { message = "Error processing borrow request" });
+                }
             }
-            catch (DbUpdateException ex)
+            catch (Exception ex)
             {
                 return StatusCode(500, new { message = "Error processing borrow request", error = ex.Message });
             }
         }
- /*       [AllowAnonymous]
-        [HttpPost("refresh-token")]
-        public async Task<IActionResult> RefreshToken()
-        {
-            var refreshToken = Request.Cookies["refreshToken"];
-            if (string.IsNullOrEmpty(refreshToken))
-            {
-                return BadRequest(new { message = "Refresh token is missing." });
-            }
+        /*       [AllowAnonymous]
+               [HttpPost("refresh-token")]
+               public async Task<IActionResult> RefreshToken()
+               {
+                   var refreshToken = Request.Cookies["refreshToken"];
+                   if (string.IsNullOrEmpty(refreshToken))
+                   {
+                       return BadRequest(new { message = "Refresh token is missing." });
+                   }
 
-            var refreshTokenEntity = await _context.RefreshTokens
-                .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
+                   var refreshTokenEntity = await _context.RefreshTokens
+                       .FirstOrDefaultAsync(rt => rt.Token == refreshToken);
 
-            if (refreshTokenEntity == null)
-            {
-                return Unauthorized(new { message = "Invalid refresh token." });
-            }
+                   if (refreshTokenEntity == null)
+                   {
+                       return Unauthorized(new { message = "Invalid refresh token." });
+                   }
 
-            if (refreshTokenEntity.IsExpired)
-            {
-                return Unauthorized(new { message = "Refresh token has expired." });
-            }
+                   if (refreshTokenEntity.IsExpired)
+                   {
+                       return Unauthorized(new { message = "Refresh token has expired." });
+                   }
 
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_secretKey);
-            SecurityTokenDescriptor tokenDescriptor = null;
+                   var tokenHandler = new JwtSecurityTokenHandler();
+                   var key = Encoding.ASCII.GetBytes(_secretKey);
+                   SecurityTokenDescriptor tokenDescriptor = null;
 
-            switch (refreshTokenEntity.UserType)
-            {
-                case "Admin":
-                    var admin = await _context.Admins
-                        .FirstOrDefaultAsync(a => a.AdminName == refreshTokenEntity.AdminName);
-                    if (admin == null)
-                    {
-                        return Unauthorized(new { message = "Admin not found." });
-                    }
-                    tokenDescriptor = new SecurityTokenDescriptor
-                    {
-                        Subject = new ClaimsIdentity(new[]
-                        {
-                    new Claim("name", admin.AdminName),
-                    new Claim("role", "Admin")
-                }),
-                        Expires = DateTime.UtcNow.AddHours(1),
-                        SigningCredentials = new SigningCredentials(
-                            new SymmetricSecurityKey(key),
-                            SecurityAlgorithms.HmacSha256Signature),
-                        Issuer = _issuer,
-                        Audience = _Audience
-                    };
-                    break;
+                   switch (refreshTokenEntity.UserType)
+                   {
+                       case "Admin":
+                           var admin = await _context.Admins
+                               .FirstOrDefaultAsync(a => a.AdminName == refreshTokenEntity.AdminName);
+                           if (admin == null)
+                           {
+                               return Unauthorized(new { message = "Admin not found." });
+                           }
+                           tokenDescriptor = new SecurityTokenDescriptor
+                           {
+                               Subject = new ClaimsIdentity(new[]
+                               {
+                           new Claim("name", admin.AdminName),
+                           new Claim("role", "Admin")
+                       }),
+                               Expires = DateTime.UtcNow.AddHours(1),
+                               SigningCredentials = new SigningCredentials(
+                                   new SymmetricSecurityKey(key),
+                                   SecurityAlgorithms.HmacSha256Signature),
+                               Issuer = _issuer,
+                               Audience = _Audience
+                           };
+                           break;
 
-                case "BookOwner":
-                    var bookOwner = await _context.BookOwners
-                        .FirstOrDefaultAsync(bo => bo.BookOwnerID == refreshTokenEntity.BookOwnerId);
-                    if (bookOwner == null)
-                    {
-                        return Unauthorized(new { message = "BookOwner not found." });
-                    }
-                    if (bookOwner.RequestStatus != "Approved")
-                    {
-                        return StatusCode(StatusCodes.Status403Forbidden, new { message = "Your account is not approved." });
-                    }
-                    tokenDescriptor = new SecurityTokenDescriptor
-                    {
-                        Subject = new ClaimsIdentity(new[]
-                        {
-                    new Claim("name", bookOwner.BookOwnerName),
-                    new Claim("role", "BookOwner"),
-                    new Claim("bookOwnerId", bookOwner.BookOwnerID.ToString())
-                }),
-                        Expires = DateTime.UtcNow.AddHours(2),
-                        SigningCredentials = new SigningCredentials(
-                            new SymmetricSecurityKey(key),
-                            SecurityAlgorithms.HmacSha256Signature),
-                        Issuer = _issuer,
-                        Audience = _Audience
-                    };
-                    break;
+                       case "BookOwner":
+                           var bookOwner = await _context.BookOwners
+                               .FirstOrDefaultAsync(bo => bo.BookOwnerID == refreshTokenEntity.BookOwnerId);
+                           if (bookOwner == null)
+                           {
+                               return Unauthorized(new { message = "BookOwner not found." });
+                           }
+                           if (bookOwner.RequestStatus != "Approved")
+                           {
+                               return StatusCode(StatusCodes.Status403Forbidden, new { message = "Your account is not approved." });
+                           }
+                           tokenDescriptor = new SecurityTokenDescriptor
+                           {
+                               Subject = new ClaimsIdentity(new[]
+                               {
+                           new Claim("name", bookOwner.BookOwnerName),
+                           new Claim("role", "BookOwner"),
+                           new Claim("bookOwnerId", bookOwner.BookOwnerID.ToString())
+                       }),
+                               Expires = DateTime.UtcNow.AddHours(2),
+                               SigningCredentials = new SigningCredentials(
+                                   new SymmetricSecurityKey(key),
+                                   SecurityAlgorithms.HmacSha256Signature),
+                               Issuer = _issuer,
+                               Audience = _Audience
+                           };
+                           break;
 
-                case "Reader":
-                    var reader = await _context.Readers
-                        .FirstOrDefaultAsync(r => r.ReaderID == refreshTokenEntity.ReaderId);
-                    if (reader == null)
-                    {
-                        return Unauthorized(new { message = "Reader not found." });
-                    }
-                    tokenDescriptor = new SecurityTokenDescriptor
-                    {
-                        Subject = new ClaimsIdentity(new[]
-                        {
-                    new Claim("name", reader.ReaderName),
-                    new Claim("role", "Reader"),
-                    new Claim("readerId", reader.ReaderID.ToString())
-                }),
-                        Expires = DateTime.UtcNow.AddHours(2),
-                        SigningCredentials = new SigningCredentials(
-                            new SymmetricSecurityKey(key),
-                            SecurityAlgorithms.HmacSha256Signature),
-                        Issuer = _issuer,
-                        Audience = _Audience
-                    };
-                    break;
+                       case "Reader":
+                           var reader = await _context.Readers
+                               .FirstOrDefaultAsync(r => r.ReaderID == refreshTokenEntity.ReaderId);
+                           if (reader == null)
+                           {
+                               return Unauthorized(new { message = "Reader not found." });
+                           }
+                           tokenDescriptor = new SecurityTokenDescriptor
+                           {
+                               Subject = new ClaimsIdentity(new[]
+                               {
+                           new Claim("name", reader.ReaderName),
+                           new Claim("role", "Reader"),
+                           new Claim("readerId", reader.ReaderID.ToString())
+                       }),
+                               Expires = DateTime.UtcNow.AddHours(2),
+                               SigningCredentials = new SigningCredentials(
+                                   new SymmetricSecurityKey(key),
+                                   SecurityAlgorithms.HmacSha256Signature),
+                               Issuer = _issuer,
+                               Audience = _Audience
+                           };
+                           break;
 
-                default:
-                    return BadRequest(new { message = "Invalid user type." });
-            }
+                       default:
+                           return BadRequest(new { message = "Invalid user type." });
+                   }
 
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
+                   var token = tokenHandler.CreateToken(tokenDescriptor);
+                   var tokenString = tokenHandler.WriteToken(token);
 
-            var newRefreshToken = PasswordService.GenerateRefreshToken();
-            var newRefreshTokenEntity = new RefreshToken
-            {
-                Token = newRefreshToken,
-                Expires = DateTime.UtcNow.AddDays(7),
-                Created = DateTime.UtcNow,
-                UserId = refreshTokenEntity.UserId,
-                UserType = refreshTokenEntity.UserType,
-                AdminName = refreshTokenEntity.AdminName,
-                BookOwnerId = refreshTokenEntity.BookOwnerId,
-                ReaderId = refreshTokenEntity.ReaderId
-            };
+                   var newRefreshToken = PasswordService.GenerateRefreshToken();
+                   var newRefreshTokenEntity = new RefreshToken
+                   {
+                       Token = newRefreshToken,
+                       Expires = DateTime.UtcNow.AddDays(7),
+                       Created = DateTime.UtcNow,
+                       UserId = refreshTokenEntity.UserId,
+                       UserType = refreshTokenEntity.UserType,
+                       AdminName = refreshTokenEntity.AdminName,
+                       BookOwnerId = refreshTokenEntity.BookOwnerId,
+                       ReaderId = refreshTokenEntity.ReaderId
+                   };
 
-            _context.RefreshTokens.Remove(refreshTokenEntity);
-            _context.RefreshTokens.Add(newRefreshTokenEntity);
-            await _context.SaveChangesAsync();
+                   _context.RefreshTokens.Remove(refreshTokenEntity);
+                   _context.RefreshTokens.Add(newRefreshTokenEntity);
+                   await _context.SaveChangesAsync();
 
-            Response.Cookies.Append("refreshToken", newRefreshToken, new CookieOptions
-            {
-                HttpOnly = true,
-                Secure = true,
-                SameSite = SameSiteMode.Strict,
-                Expires = newRefreshTokenEntity.Expires
-            });
+                   Response.Cookies.Append("refreshToken", newRefreshToken, new CookieOptions
+                   {
+                       HttpOnly = true,
+                       Secure = true,
+                       SameSite = SameSiteMode.Strict,
+                       Expires = newRefreshTokenEntity.Expires
+                   });
 
-            return Ok(new { Token = tokenString });
-        }*/
+                   return Ok(new { Token = tokenString });
+               }*/
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPost("return")]
         [Authorize(Roles = "Reader")]
         public async Task<ActionResult<BookRequestResponseDTO>> ReturnBook([FromBody] BookRequestResponseDTO requestDto)
         {
-            // Validate input DTO
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
 
             // Find the book request
-            var bookRequest = await _context.BookRequests
-                .Include(br => br.BookPost)
-                .FirstOrDefaultAsync(br => br.RequsetID == requestDto.RequsetID);
+            var bookRequest = (await _bookRequestRepo.getAllFilterAsync(
+                filter: br => br.RequsetID == requestDto.RequsetID,
+                include: q => q.Include(br => br.BookPost)
+            )).FirstOrDefault();
 
             if (bookRequest == null)
             {
@@ -393,57 +428,70 @@ namespace BookSwap.Controllers
 
             try
             {
-                await _context.SaveChangesAsync();
+                bool requestUpdated = _bookRequestRepo.update(bookRequest);
+                bool postUpdated = _bookPostRepo.update(bookRequest.BookPost);
+
+                if (!requestUpdated || !postUpdated)
+                {
+                    return StatusCode(500, new { message = "Error updating the database" });
+                }
+
+                // Create response DTO
+                var response = new BookRequestResponseDTO
+                {
+                    RequsetID = bookRequest.RequsetID,
+                    BookPostID = bookRequest.BookPostID,
+                    ReaderID = bookRequest.ReaderID,
+                    RequsetStatus = bookRequest.RequsetStatus
+                };
+
+                return Ok(response);
             }
-            catch (DbUpdateException ex)
+            catch (Exception ex)
             {
                 return StatusCode(500, new { message = "Error updating the database", error = ex.Message });
             }
-
-            // Create response DTO
-            var response = new BookRequestResponseDTO
-            {
-                RequsetID = bookRequest.RequsetID,
-                BookPostID = bookRequest.BookPostID,
-                ReaderID = bookRequest.ReaderID,
-                RequsetStatus = bookRequest.RequsetStatus
-            };
-
-            return Ok(response);
         }
+
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpGet("user/{readerId}")]
         [Authorize(Roles = "Reader")]
         public async Task<ActionResult<IEnumerable<BookRequestWithTitleResponseDTO>>> GetBookRequestsForUser(int readerId)
         {
             // Check if reader exists
-            var readerExists = await _context.Readers.AnyAsync(r => r.ReaderID == readerId);
+            var readerExists = (await _readerRepo.getAllFilterAsync(
+                r => r.ReaderID == readerId
+            )).Any();
+
             if (!readerExists)
             {
                 return NotFound(new { message = "Reader not found" });
             }
 
             // Retrieve book requests with book titles
-            var bookRequests = await _context.BookRequests
-                .Where(br => br.ReaderID == readerId)
-                .Include(br => br.BookPost)
-                .Select(br => new BookRequestWithTitleResponseDTO
-                {
-                    RequsetID = br.RequsetID,
-                    BookPostID = br.BookPostID,
-                    ReaderID = br.ReaderID,
-                    RequsetStatus = br.RequsetStatus,
-                    BookTitle =  br.BookPost.Title 
-                })
-                .ToListAsync();
+            var bookRequests = await _bookRequestRepo.getAllFilterAsync(
+                filter: br => br.ReaderID == readerId,
+                include: q => q.Include(br => br.BookPost)
+            );
 
-            if (!bookRequests.Any())
+            var bookRequestDtos = bookRequests.Select(br => new BookRequestWithTitleResponseDTO
+            {
+                RequsetID = br.RequsetID,
+                BookPostID = br.BookPostID,
+                ReaderID = br.ReaderID,
+                RequsetStatus = br.RequsetStatus,
+                BookTitle = br.BookPost.Title
+            }).ToList();
+
+            if (!bookRequestDtos.Any())
             {
                 return Ok(new List<BookRequestWithTitleResponseDTO>());
             }
 
-            return Ok(bookRequests);
+            return Ok(bookRequestDtos);
         }
-        // Like a book
+
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPost("like")]
         [Authorize(Roles = "Reader")]
         public async Task<IActionResult> LikeOrDislikeBook([FromBody] LikeDTO DTO)
@@ -454,16 +502,21 @@ namespace BookSwap.Controllers
                 BookPostID = DTO.BookPostID,
                 IsLike = DTO.IsLike
             };
-            var bookPost = await _context.BookPosts.FindAsync(like.BookPostID);
+
+            var bookPost =  _bookPostRepo.getById(like.BookPostID);
             if (bookPost == null)
                 return NotFound("Book not found.");
 
-           
-            _context.Likes.Add(like);
-            await _context.SaveChangesAsync();
+            bool added = _likeRepo.add(like);
+            if (!added)
+            {
+                return StatusCode(500, new { message = "Error adding like" });
+            }
 
             return Ok(like.IsLike ? "Book liked successfully." : "Book disliked successfully.");
         }
+
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPut("like")]
         [Authorize(Roles = "Reader")]
         public async Task<IActionResult> ToggleReaction([FromBody] LikeDTO DTO)
@@ -474,17 +527,26 @@ namespace BookSwap.Controllers
                 BookPostID = DTO.BookPostID,
                 IsLike = DTO.IsLike
             };
-            var reaction = await _context.Likes
-                .FirstOrDefaultAsync(l => l.BookPostID == like.BookPostID && l.ReaderID == like.ReaderID);
+
+            var reaction = (await _likeRepo.getAllFilterAsync(
+                l => l.BookPostID == like.BookPostID && l.ReaderID == like.ReaderID
+            )).FirstOrDefault();
 
             if (reaction == null)
                 return NotFound("Reaction not found.");
 
-            reaction.IsLike = !reaction.IsLike; // Toggle like to dislike or vice versa
-            await _context.SaveChangesAsync();
+            reaction.IsLike = !reaction.IsLike;
+
+            bool updated = _likeRepo.update(reaction);
+            if (!updated)
+            {
+                return StatusCode(500, new { message = "Error updating reaction" });
+            }
 
             return Ok(reaction.IsLike ? "Changed to like successfully." : "Changed to dislike successfully.");
         }
+
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpDelete("like")]
         [Authorize(Roles = "Reader")]
         public async Task<IActionResult> DeleteReaction([FromBody] LikeDTO DTO)
@@ -495,69 +557,84 @@ namespace BookSwap.Controllers
                 BookPostID = DTO.BookPostID,
                 IsLike = DTO.IsLike
             };
-            var reaction = await _context.Likes
-                .FirstOrDefaultAsync(l => l.BookPostID == like.BookPostID && l.ReaderID == like.ReaderID);
+
+            var reaction = (await _likeRepo.getAllFilterAsync(
+                l => l.BookPostID == like.BookPostID && l.ReaderID == like.ReaderID
+            )).FirstOrDefault();
 
             if (reaction == null)
                 return NotFound("Reaction not found.");
 
-            _context.Likes.Remove(reaction);
-            await _context.SaveChangesAsync();
+            bool deleted = _likeRepo.remove(reaction.LikeID); // Assuming Like has an Id property
+            if (!deleted)
+            {
+                return StatusCode(500, new { message = "Error deleting reaction" });
+            }
 
             return Ok("Reaction deleted successfully.");
         }
-        
+
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPost("comment")]
         [Authorize(Roles = "Reader")]
-        public async Task<IActionResult> CommentOnBookPost( [FromBody] CommentDTO DTO)
+        public async Task<IActionResult> CommentOnBookPost([FromBody] CommentDTO DTO)
         {
             var comment = new Comment
             {
-                ReaderID=DTO.ReaderID,
+                ReaderID = DTO.ReaderID,
                 BookPostID = DTO.BookPostID,
                 Content = DTO.Content
             };
-            var bookPost = await _context.BookPosts.FindAsync(comment.BookPostID);
+
+            var bookPost =  _bookPostRepo.getById(comment.BookPostID);
             if (bookPost == null)
                 return NotFound("Book not found.");
 
-            _context.Comments.Add(comment);
-            await _context.SaveChangesAsync();
+            bool added = _commentRepo.add(comment);
+            if (!added)
+            {
+                return StatusCode(500, new { message = "Error adding comment" });
+            }
 
             return Ok("Comment added successfully.");
         }
 
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPost("reply")]
         [Authorize(Roles = "Reader")]
-        public async Task<IActionResult> ReolyOnComment([FromBody] ReplyDTO DTO)
+        public async Task<IActionResult> ReplyOnComment([FromBody] ReplyDTO DTO)
         {
-            var Reply = new Reply
+            var reply = new Reply
             {
                 ReaderID = DTO.ReaderID,
                 CommentID = DTO.CommentID,
                 Content = DTO.Content
             };
-            var bookPost = await _context.Comments.FindAsync(Reply.CommentID);
-            if (bookPost == null)
+
+            var comment =  _commentRepo.getById(reply.CommentID);
+            if (comment == null)
                 return NotFound("Comment not found.");
 
-            _context.Replies.Add(Reply);
-            await _context.SaveChangesAsync();
+            bool added = _replyRepo.add(reply);
+            if (!added)
+            {
+                return StatusCode(500, new { message = "Error adding reply" });
+            }
 
-            return Ok("Comment added successfully.");
+            return Ok("Reply added successfully.");
         }
 
-      /*  private string HashPassword(string password)
-        {
-            var key = Encoding.UTF8.GetBytes("Your_Secret_Key");
-            using var hmac = new HMACSHA256(key);
-            var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
-            return Convert.ToBase64String(hash);
-        }
+        /*  private string HashPassword(string password)
+          {
+              var key = Encoding.UTF8.GetBytes("Your_Secret_Key");
+              using var hmac = new HMACSHA256(key);
+              var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
+              return Convert.ToBase64String(hash);
+          }
 
-        private bool VerifyPassword(string inputPassword, string storedHash)
-        {
-            return HashPassword(inputPassword) == storedHash;
-        }*/
+          private bool VerifyPassword(string inputPassword, string storedHash)
+          {
+              return HashPassword(inputPassword) == storedHash;
+          }*/
     }
 }

@@ -2,6 +2,7 @@
 using BookSwap.Data.Contexts;
 using BookSwap.DTOS;
 using BookSwap.Models;
+using BookSwap.Repos;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,24 +21,39 @@ public class BookOwnerController : ControllerBase
     private readonly string _secretKey;
     private readonly string _issuer;
     private readonly string _Audience;
+    private readonly GenericRepo<BookPost> _bookPostRepo;
+    private readonly GenericRepo<BookOwner> _BookOwnerRepo;
+    private readonly GenericRepo<BookRequest> _bookRequestRepo;
+    private readonly GenericRepo<RefreshToken> _refreshTokenRepo;
 
-    public BookOwnerController(BookSwapDbContext context, IConfiguration configuration)
+    public BookOwnerController(
+        BookSwapDbContext context,
+        IConfiguration configuration,
+        GenericRepo<BookPost> bookPostRepo,
+        GenericRepo<BookOwner> BookOwnerRepo,
+        GenericRepo<BookRequest> bookRequestRepo,
+        GenericRepo<RefreshToken> refreshTokenRepo)
     {
         _context = context;
         _secretKey = configuration["Jwt:Key"];
         _issuer = configuration["jwt:Issuer"];
         _Audience = configuration["jwt:Audience"];
+        _bookPostRepo = bookPostRepo;
+        _BookOwnerRepo = BookOwnerRepo;
+        _bookRequestRepo = bookRequestRepo;
+        _refreshTokenRepo = refreshTokenRepo;
     }
     [AllowAnonymous]
     [HttpPost("signup")]
     public async Task<IActionResult> SignUp([FromBody] BookOwnerSignUpDTO bookOwnerDto)
     {
-        var exists = await _context.BookOwners
-            .AnyAsync(b => b.BookOwnerName == bookOwnerDto.BookOwnerName);
+        // Use GenericRepo to check if BookOwner already exists
+        var exists = (await _BookOwnerRepo.getAllFilterAsync(b => b.BookOwnerName == bookOwnerDto.BookOwnerName)).Any();
 
         if (exists)
             return BadRequest("BookOwner already exists.");
 
+        // Create new BookOwner entity
         var bookOwner = new BookOwner
         {
             BookOwnerName = bookOwnerDto.BookOwnerName,
@@ -48,8 +64,11 @@ public class BookOwnerController : ControllerBase
             EncryptedPhoneNumber = PasswordService.Encrypt(bookOwnerDto.PhoneNumber)
         };
 
-        _context.BookOwners.Add(bookOwner);
-        await _context.SaveChangesAsync();
+        // Use GenericRepo to add the BookOwner
+        var added = _BookOwnerRepo.add(bookOwner);
+
+        if (!added)
+            return StatusCode(500, "Failed to register BookOwner.");
 
         return Ok("BookOwner registered. Waiting for admin approval.");
     }
@@ -64,9 +83,14 @@ public class BookOwnerController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        // Find book owner by BookOwnerName
-        var existing = await _context.BookOwners
-            .FirstOrDefaultAsync(b => b.BookOwnerName == bookOwnerDTO.BookOwnerName);
+        // Initialize repositories
+        
+
+        // Find book owner by BookOwnerName using GenericRepo
+        var existingList = await _BookOwnerRepo.getAllFilterAsync(
+            filter: b => b.BookOwnerName == bookOwnerDTO.BookOwnerName
+        );
+        var existing = existingList.FirstOrDefault();
 
         if (existing == null || !PasswordService.VerifyPassword(bookOwnerDTO.Password, existing.Password))
         {
@@ -90,10 +114,10 @@ public class BookOwnerController : ControllerBase
         {
             Subject = new ClaimsIdentity(new[]
             {
-           new Claim("name", existing.BookOwnerName),
-           new Claim("role", "BookOwner"),
-           new Claim("bookOwnerId", existing.BookOwnerID.ToString())
-       }),
+            new Claim("name", existing.BookOwnerName),
+            new Claim("role", "BookOwner"),
+            new Claim("bookOwnerId", existing.BookOwnerID.ToString())
+        }),
             Expires = DateTime.UtcNow.AddHours(2),
             SigningCredentials = new SigningCredentials(
                 new SymmetricSecurityKey(key),
@@ -111,13 +135,17 @@ public class BookOwnerController : ControllerBase
             Token = refreshToken,
             Expires = DateTime.UtcNow.AddDays(7),
             Created = DateTime.UtcNow,
-            UserId = existing.BookOwnerID.ToString(), // Using BookOwnerID as UserId
+            UserId = existing.BookOwnerID.ToString(),
             UserType = "BookOwner",
             BookOwnerId = existing.BookOwnerID
         };
 
-        _context.RefreshTokens.Add(refreshTokenEntity);
-        await _context.SaveChangesAsync();
+        // Add refresh token using GenericRepo
+        bool isRefreshTokenAdded = _refreshTokenRepo.add(refreshTokenEntity);
+        if (!isRefreshTokenAdded)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Failed to save refresh token." });
+        }
 
         // Set refresh token in HTTP-only cookie
         Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
@@ -146,8 +174,11 @@ public class BookOwnerController : ControllerBase
     [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> CreateBookPost([FromForm] BookPostDTO dto)
     {
+        // Convert CoverPhoto to byte array
         using var stream = new MemoryStream();
         await dto.CoverPhoto.CopyToAsync(stream);
+
+        // Create BookPost entity
         var post = new BookPost
         {
             BookOwnerID = dto.BookOwnerID,
@@ -163,44 +194,60 @@ public class BookOwnerController : ControllerBase
             PostStatus = "Pending",
             CoverPhoto = stream.ToArray()
         };
-        await _context.BookPosts.AddAsync(post);
-        await _context.SaveChangesAsync();
-        return Ok("Book post created successfully!");
-    }
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
-    [HttpDelete("{id}")]
 
-    public async Task<IActionResult> DeleteBookPost(int id)
+        // Add BookPost using GenericRepo
+        bool isAdded = _bookPostRepo.add(post);
+        if (!isAdded)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = "Failed to create book post." });
+        }
+
+        return Ok(new { message = "Book post created successfully!" });
+    }
+ [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+[HttpDelete("{id}")]
+public async Task<IActionResult> DeleteBookPost(int id)
+{
+    // Find BookPost using GenericRepo
+    var post = _bookPostRepo.getById(id);
+    if (post == null)
     {
-        var post = await _context.BookPosts.FindAsync(id);
-
-        if (post == null)
-        {
-            return NotFound($"No BookPost found with ID = {id}");
-        }
-
-        if (post.PostStatus == "Borrowed")
-        {
-            return BadRequest("Cannot delete a borrowed book post.");
-        }
-
-        _context.BookPosts.Remove(post);
-        await _context.SaveChangesAsync();
-
-        return Ok($"BookPost with ID = {id} deleted successfully.");
+        return NotFound($"No BookPost found with ID = {id}");
     }
+
+    // Check if the post is borrowed
+    if (post.PostStatus == "Borrowed")
+    {
+        return BadRequest("Cannot delete a borrowed book post.");
+    }
+
+    // Remove BookPost using GenericRepo
+    bool isDeleted = _bookPostRepo.remove(id);
+    if (!isDeleted)
+    {
+        return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Failed to delete BookPost with ID = {id}." });
+    }
+
+    return Ok($"BookPost with ID = {id} deleted successfully.");
+}
 
     [HttpPut("{id}")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> UpdateBookPost(int id, [FromForm] BookPostDTO dto)
     {
-        var post = await _context.BookPosts.FindAsync(id);
+        // Find BookPost using GenericRepo
+        var post = _bookPostRepo.getById(id);
+        if (post == null)
+        {
+            return NotFound($"BookPost with ID = {id} not found.");
+        }
+
+        // Convert CoverPhoto to byte array
         using var stream = new MemoryStream();
         await dto.CoverPhoto.CopyToAsync(stream);
-        if (post == null)
-            return NotFound($"BookPost with ID = {id} not found.");
 
+        // Update BookPost properties
         post.Title = dto.Title;
         post.Genre = dto.Genre;
         post.ISBN = dto.ISBN;
@@ -212,9 +259,12 @@ public class BookOwnerController : ControllerBase
         post.Price = dto.Price;
         post.CoverPhoto = stream.ToArray();
 
-
-
-        await _context.SaveChangesAsync();
+        // Update BookPost using GenericRepo
+        bool isUpdated = _bookPostRepo.update(post);
+        if (!isUpdated)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = $"Failed to update BookPost with ID = {id}." });
+        }
 
         return Ok($"BookPost with ID = {id} updated successfully.");
     }
@@ -274,7 +324,6 @@ public class BookOwnerController : ControllerBase
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpPost("respond")]
     [Authorize(Roles = "BookOwner")]
-
     public async Task<IActionResult> RespondToBookRequest([FromBody] BookRequestResponseDTO responseDto)
     {
         if (!ModelState.IsValid)
@@ -282,11 +331,12 @@ public class BookOwnerController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        // Find the book request
-        var bookRequest = await _context.BookRequests
-            .Include(br => br.BookPost)
-            .ThenInclude(bp => bp.BookOwner)
-            .FirstOrDefaultAsync(br => br.RequsetID == responseDto.RequsetID);
+        // Find the book request with related data
+        var bookRequest = (await _bookRequestRepo.getAllFilterAsync(
+            filter: br => br.RequsetID == responseDto.RequsetID,
+            include: q => q.Include(br => br.BookPost)
+                          .ThenInclude(bp => bp.BookOwner)
+        )).FirstOrDefault();
 
         if (bookRequest == null)
         {
@@ -312,8 +362,7 @@ public class BookOwnerController : ControllerBase
             return BadRequest(new { message = "Invalid request status. Must be 'Accepted' or 'Rejected'" });
         }
 
-        // Verify the book owner is authorized (assuming the owner ID is available via authentication)
-        // Note: In a real application, you'd get the owner ID from the authenticated user context
+        // Verify the book owner is authorized
         var bookOwnerId = bookRequest.BookPost.BookOwnerID;
         if (bookRequest.BookPost.BookOwnerID != bookOwnerId)
         {
@@ -328,31 +377,36 @@ public class BookOwnerController : ControllerBase
 
         try
         {
-            _context.BookRequests.Update(bookRequest);
-            _context.BookPosts.Update(bookRequest.BookPost);
-            await _context.SaveChangesAsync();
+            bool requestUpdated = _bookRequestRepo.update(bookRequest);
+            bool postUpdated = _bookPostRepo.update(bookRequest.BookPost);
 
-            return Ok(new
+            if (requestUpdated && postUpdated)
             {
-                message = $"Book request {responseDto.RequsetStatus.ToLower()} successfully",
-                requestId = bookRequest.RequsetID,
-                bookPostId = bookRequest.BookPostID
-            });
+                return Ok(new
+                {
+                    message = $"Book request {responseDto.RequsetStatus.ToLower()} successfully",
+                    requestId = bookRequest.RequsetID,
+                    bookPostId = bookRequest.BookPostID
+                });
+            }
+            else
+            {
+                return StatusCode(500, new { message = "Error updating request or post" });
+            }
         }
-        catch (DbUpdateException ex)
+        catch (Exception ex)
         {
             return StatusCode(500, new { message = "Error processing request response", error = ex.Message });
         }
     }
+
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpGet("owner/")]
     [Authorize(Roles = "BookOwner")]
-
     public async Task<IActionResult> GetBookRequestsForOwner(int bookOwnerId)
     {
         // Verify book owner exists
-        var bookOwner = await _context.BookOwners
-            .FirstOrDefaultAsync(bo => bo.BookOwnerID == bookOwnerId);
+        var bookOwner =  _BookOwnerRepo.getById(bookOwnerId);
 
         if (bookOwner == null)
         {
@@ -360,22 +414,23 @@ public class BookOwnerController : ControllerBase
         }
 
         // Fetch all book requests for books owned by this owner and map to DTO
-        var bookRequests = await _context.BookRequests
-            .Include(br => br.BookPost)
-            .Include(br => br.Reader)
-            .Where(br => br.BookPost.BookOwnerID == bookOwnerId)
-            .Select(br => new GetBookRequestsDTO
-            {
-                RequsetID = br.RequsetID,
-                BookPostID = br.BookPostID,
-                BookTitle = br.BookPost.Title,
-                ReaderID = br.ReaderID,
-                ReaderName = br.Reader.ReaderName,
-                RequsetStatus = br.RequsetStatus
-            })
-            .ToListAsync();
+        var bookRequests = await _bookRequestRepo.getAllFilterAsync(
+            filter: br => br.BookPost.BookOwnerID == bookOwnerId,
+            include: q => q.Include(br => br.BookPost)
+                          .Include(br => br.Reader)
+        );
 
-        if (!bookRequests.Any())
+        var bookRequestDtos = bookRequests.Select(br => new GetBookRequestsDTO
+        {
+            RequsetID = br.RequsetID,
+            BookPostID = br.BookPostID,
+            BookTitle = br.BookPost.Title,
+            ReaderID = br.ReaderID,
+            ReaderName = br.Reader.ReaderName,
+            RequsetStatus = br.RequsetStatus
+        }).ToList();
+
+        if (!bookRequestDtos.Any())
         {
             return Ok(new { message = "No book requests found for this owner", requests = new List<GetBookRequestsDTO>() });
         }
@@ -383,9 +438,10 @@ public class BookOwnerController : ControllerBase
         return Ok(new
         {
             message = "Book requests retrieved successfully",
-            requests = bookRequests
+            requests = bookRequestDtos
         });
     }
+}
 
   /*  private string HashPassword(string password)
     {
@@ -399,4 +455,4 @@ public class BookOwnerController : ControllerBase
     {
         return HashPassword(inputPassword) == storedHash;
     }*/
-}
+

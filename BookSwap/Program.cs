@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
+using BookSwap.Repos;
+using BookSwap.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +18,7 @@ builder.Services.AddCors(options => options.AddPolicy(name: "FrontendUI",
         policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
     }
 ));
+builder.Services.AddScoped(typeof(GenericRepo<>));
 builder.Services.AddSwaggerGen(c =>
 {
     // Add security definition
@@ -46,7 +49,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 });
 // Add DbContext
-builder.Services.AddDbContext<BookSwapDbContext>(op => op.UseSqlServer(builder.Configuration.GetConnectionString("7amataCon")));
+builder.Services.AddDbContext<BookSwapDbContext>(op => op.UseSqlServer(builder.Configuration.GetConnectionString("MyCon")));
 
 // Add JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
