@@ -47,9 +47,10 @@ public class AdminController : ControllerBase
 
     // -------------------- Auth Operations --------------------
 
-    [AllowAnonymous]
-    [HttpPost("signup")]
-    public async Task<IActionResult> SignUp([FromBody] AdminDTO DTO)
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [Authorize(Roles = "Admin")]
+    [HttpPost("create")]
+    public async Task<IActionResult> CreateAdmin([FromBody] AdminDTO DTO)
     {
         var existingAdmin = (await _adminRepo.getAllFilterAsync(
             a => a.AdminName == DTO.AdminName
