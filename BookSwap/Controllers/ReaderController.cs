@@ -87,7 +87,7 @@ namespace BookSwap.Controllers
 
         // Reader login (generate JWT token)
         [AllowAnonymous]
-        [HttpPost("reader/login")]
+        [HttpPost("login")]
         public async Task<IActionResult> ReaderLogin([FromBody] ReaderLoginDTO readerDTO)
         {
             // Validate input
