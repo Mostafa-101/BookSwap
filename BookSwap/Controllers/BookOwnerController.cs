@@ -479,6 +479,57 @@ public async Task<IActionResult> DeleteBookPost(int id)
             requests = bookRequestDtos
         });
     }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [HttpGet("posts/{bookOwnerId}")]
+    [Authorize(Roles = "BookOwner")]
+    public async Task<IActionResult> GetAllPostsForOwner(int bookOwnerId)
+    {
+        // Verify book owner exists
+        var bookOwner = _BookOwnerRepo.getById(bookOwnerId);
+        if (bookOwner == null)
+        {
+            return NotFound(new { message = "Book owner not found" });
+        }
+
+        // Fetch all book posts for this owner using GenericRepo with BookOwner included
+        var bookPosts = await _bookPostRepo.getAllFilterAsync(
+            filter: bp => bp.BookOwnerID == bookOwnerId,
+            include: q => q.Include(bp => bp.BookOwner)
+                            .Include(bp => bp.Likes)
+        );
+
+        // Map to BookPostResponseDto
+        var bookPostDtos = bookPosts.Select(bp => new BookPostResponseDto
+        {
+            BookOwnerID = bp.BookOwnerID,
+            BookOwnerName = bp.BookOwner.BookOwnerName,
+            BookPostID = bp.BookPostID,
+            Title = bp.Title,
+            Genre = bp.Genre,
+            ISBN = bp.ISBN,
+            Description = bp.Description,
+            Language = bp.Language,
+            PublicationDate = bp.PublicationDate,
+            StartDate = bp.StartDate,
+            EndDate = bp.EndDate,
+            Price = bp.Price,
+            CoverPhoto = bp.CoverPhoto != null ? Convert.ToBase64String(bp.CoverPhoto) : null,
+            TotalLikes = bp.Likes.Count(l => l.IsLike),
+            TotalDislikes = bp.Likes.Count(l => !l.IsLike)
+        }).ToList();
+
+        if (!bookPostDtos.Any())
+        {
+            return Ok(new { message = "No book posts found for this owner", posts = new List<BookPostResponseDto>() });
+        }
+
+        return Ok(new
+        {
+            message = "Book posts retrieved successfully",
+            posts = bookPostDtos
+        });
+    }
+}
 }
 
   /*  private string HashPassword(string password)

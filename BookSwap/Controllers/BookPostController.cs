@@ -119,10 +119,10 @@ namespace BookSwap.Controllers
 
         [HttpGet("Search")]
         public async Task<IActionResult> SearchAvailableBookPosts(
-            [FromQuery] string? genre,
-            [FromQuery] string? title,
-            [FromQuery] string? language,
-            [FromQuery] int? price)
+               [FromQuery] string? genre,
+               [FromQuery] string? title,
+               [FromQuery] string? language,
+               [FromQuery] int? price)
         {
             var currentDate = DateTime.UtcNow;
 
@@ -133,7 +133,7 @@ namespace BookSwap.Controllers
                 (string.IsNullOrEmpty(genre) || bp.Genre.ToLower() == genre.ToLower()) &&
                 (string.IsNullOrEmpty(title) || bp.Title.ToLower().Contains(title.ToLower())) &&
                 (string.IsNullOrEmpty(language) || bp.Language.ToLower() == language.ToLower()) &&
-                (!price.HasValue || bp.Price == price.Value);
+                (!price.HasValue || bp.Price <= price.Value);
 
             var filteredPosts = await _bookPostRepo.getAllFilterAsync(
                 filter: filter,
@@ -162,8 +162,10 @@ namespace BookSwap.Controllers
 
             return Ok(response);
         }
+
     }
 }
+
 /*[HttpGet("Search")]
         public async Task<IActionResult> SearchAvailableBookPosts(
        [FromQuery] string? genre,
