@@ -49,7 +49,7 @@ builder.Services.AddSwaggerGen(c =>
 });
 });
 // Add DbContext
-builder.Services.AddDbContext<BookSwapDbContext>(op => op.UseSqlServer(builder.Configuration.GetConnectionString("NahrawCon")));
+builder.Services.AddDbContext<BookSwapDbContext>(op => op.UseSqlServer(builder.Configuration.GetConnectionString("MyCon")));
 
 // Add JWT Authentication
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

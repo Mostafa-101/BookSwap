@@ -548,6 +548,27 @@ namespace BookSwap.Controllers
 
             return Ok(like.IsLike ? "Book liked successfully." : "Book disliked successfully.");
         }
+        [HttpGet("check-like")]
+        [Authorize(Roles = "Reader")]
+        public async Task<IActionResult> CheckLikeStatus([FromQuery] int readerId, [FromQuery] int bookPostId)
+        {
+            var bookPost = _bookPostRepo.getById(bookPostId);
+            if (bookPost == null)
+                return NotFound("Book not found.");
+
+            var like = (await _likeRepo.getAllFilterAsync(l => l.ReaderID == readerId && l.BookPostID == bookPostId))
+                .FirstOrDefault();
+
+            if (like == null)
+                return Ok(new { message = "No like or dislike record found for this book post." });
+
+            return Ok(new
+            {
+                ReaderID = like.ReaderID,
+                BookPostID = like.BookPostID,
+                IsLike = like.IsLike,
+            });
+        }
 
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPut("like")]

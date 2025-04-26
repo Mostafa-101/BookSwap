@@ -530,7 +530,7 @@ public async Task<IActionResult> DeleteBookPost(int id)
         });
     }
 }
-}
+
 
   /*  private string HashPassword(string password)
     {
