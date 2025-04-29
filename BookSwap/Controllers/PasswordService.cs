@@ -1,7 +1,9 @@
 ﻿using BCrypt.Net;
+using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-
 
 namespace BookSwap.Controllers
 {
@@ -113,6 +115,38 @@ namespace BookSwap.Controllers
             {
                 throw new CryptographicException("Decryption failed.", ex);
             }
+        }
+
+        public static string GenerateJwtToken(string secretKey, string issuer, string audience,
+            string userName, string role, string? userId = null)
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var key = Encoding.ASCII.GetBytes(secretKey);
+
+            var claims = new List<Claim>
+            {
+                new Claim("name", userName),
+                new Claim("role", role)
+            };
+
+            if (!string.IsNullOrEmpty(userId))
+            {
+                claims.Add(new Claim($"{role.ToLower()}Id", userId));
+            }
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                Expires = DateTime.UtcNow.AddHours(1),
+                SigningCredentials = new SigningCredentials(
+                    new SymmetricSecurityKey(key),
+                    SecurityAlgorithms.HmacSha256Signature),
+                Issuer = issuer,
+                Audience = audience
+            };
+
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+            return tokenHandler.WriteToken(token);
         }
     }
 }

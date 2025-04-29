@@ -45,7 +45,6 @@ public class AdminController : ControllerBase
         _bookPostRepo = bookPostRepo;
     }
 
-    // -------------------- Auth Operations --------------------
 
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [Authorize(Roles = "Admin")]
@@ -74,79 +73,68 @@ public class AdminController : ControllerBase
         return Ok("Admin registered successfully.");
     }
 
-    [AllowAnonymous]
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] AdminDTO DTO)
-    {
-        if (!ModelState.IsValid)
+[AllowAnonymous]
+        [HttpPost("admin/login")]
+        public async Task<IActionResult> Login([FromBody] AdminDTO DTO)
         {
-            return BadRequest(ModelState);
-        }
-
-        var existing = (await _adminRepo.getAllFilterAsync(
-            a => a.AdminName == DTO.AdminName
-        )).FirstOrDefault();
-
-        if (existing == null || !PasswordService.VerifyPassword(DTO.PasswordHash, existing.PasswordHash))
-        {
-            return Unauthorized(new { message = "Invalid credentials." });
-        }
-
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var key = Encoding.ASCII.GetBytes(_secretKey);
-        var tokenDescriptor = new SecurityTokenDescriptor
-        {
-            Subject = new ClaimsIdentity(new[]
+            if (!ModelState.IsValid)
             {
-                new Claim("name", existing.AdminName),
-                new Claim("role", "Admin")
-            }),
-            Expires = DateTime.UtcNow.AddHours(1),
-            SigningCredentials = new SigningCredentials(
-                new SymmetricSecurityKey(key),
-                SecurityAlgorithms.HmacSha256Signature),
-            Issuer = _issuer,
-            Audience = _Audience
-        };
-        var token = tokenHandler.CreateToken(tokenDescriptor);
-        var tokenString = tokenHandler.WriteToken(token);
-
-        var refreshToken = PasswordService.GenerateRefreshToken();
-        var refreshTokenEntity = new RefreshToken
-        {
-            Token = refreshToken,
-            Expires = DateTime.UtcNow.AddDays(7),
-            Created = DateTime.UtcNow,
-            UserId = existing.AdminName,
-            UserType = "Admin",
-            AdminName = existing.AdminName
-        };
-
-        bool tokenAdded = _refreshTokenRepo.add(refreshTokenEntity);
-        if (!tokenAdded)
-        {
-            return StatusCode(500, new { message = "Error storing refresh token" });
-        }
-
-        Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure = true,
-            SameSite = SameSiteMode.Strict,
-            Expires = refreshTokenEntity.Expires
-        });
-
-        return Ok(new
-        {
-            Token = tokenString,
-            User = new
-            {
-                AdminName = existing.AdminName
+                return BadRequest(ModelState);
             }
-        });
-    }
 
-    // -------------------- BookOwner Management --------------------
+            var existing = (await _adminRepo.getAllFilterAsync(
+                a => a.AdminName == DTO.AdminName
+            )).FirstOrDefault();
+
+            if (existing == null || !PasswordService.VerifyPassword(DTO.PasswordHash, existing.PasswordHash))
+            {
+                return Unauthorized(new { message = "Invalid credentials." });
+            }
+
+            var tokenString = PasswordService.GenerateJwtToken(
+                _secretKey, 
+                _issuer, 
+                _Audience, 
+                existing.AdminName, 
+                "Admin"
+                
+            );
+
+            var refreshToken = PasswordService.GenerateRefreshToken();
+            var refreshTokenEntity = new RefreshToken
+            {
+                Token = refreshToken,
+                Expires = DateTime.UtcNow.AddDays(7),
+                Created = DateTime.UtcNow,
+                UserId = existing.AdminName,
+                UserType = "Admin",
+                AdminName = existing.AdminName
+            };
+
+            bool tokenAdded = _refreshTokenRepo.add(refreshTokenEntity);
+            if (!tokenAdded)
+            {
+                return StatusCode(500, new { message = "Error storing refresh token" });
+            }
+
+            Response.Cookies.Append("refreshToken", refreshToken, new CookieOptions
+            {
+                HttpOnly = true,
+                Secure = true,
+                SameSite = SameSiteMode.Strict,
+                Expires = refreshTokenEntity.Expires
+            });
+
+            return Ok(new
+            {
+                Token = tokenString,
+                User = new
+                {
+                    AdminName = existing.AdminName
+                }
+            });
+        }
+
 
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [Authorize(Roles = "Admin")]
@@ -269,59 +257,5 @@ public class AdminController : ControllerBase
 
         return Ok($"Book Post {action}d.");
     }
-    // -------------------- Helpers --------------------
-
-    private string HashPassword(string password)
-    {
-        var key = Encoding.UTF8.GetBytes(_secretKey);
-        using var hmac = new HMACSHA256(key);
-        var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(password));
-        return Convert.ToBase64String(hash);
-    }
-
-    /*  private bool VerifyPassword(string inputPassword, string storedPasswordHash)
-      {
-          var inputHash = HashPassword(inputPassword);
-          return inputHash == storedPasswordHash;
-      }*/
-    /*  // -------------------- Admin CRUD --------------------
-
-        [HttpGet("{adminName}")]
-        public async Task<IActionResult> GetAdmin(string adminName)
-        {
-            var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
-            if (admin == null) return NotFound("Admin not found.");
-            return Ok(admin);
-        }
-
-        [HttpPut("{adminName}")]
-        public async Task<IActionResult> UpdateAdmin(string adminName, [FromBody] Admin updatedAdmin)
-        {
-            var existingAdmin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
-            if (existingAdmin == null) return NotFound("Admin not found.");
-
-            existingAdmin.AdminName = updatedAdmin.AdminName;
-            if (!string.IsNullOrEmpty(updatedAdmin.PasswordHash))
-            {
-                existingAdmin.PasswordHash = HashPassword(updatedAdmin.PasswordHash);
-            }
-
-            _context.Admins.Update(existingAdmin);
-            await _context.SaveChangesAsync();
-
-            return Ok("Admin updated successfully.");
-        }
-
-        [HttpDelete("{adminName}")]
-        public async Task<IActionResult> DeleteAdmin(string adminName)
-        {
-            var admin = await _context.Admins.FirstOrDefaultAsync(a => a.AdminName == adminName);
-            if (admin == null) return NotFound("Admin not found.");
-
-            _context.Admins.Remove(admin);
-            await _context.SaveChangesAsync();
-
-            return Ok("Admin deleted successfully.");
-        }
-        */
+   
 }

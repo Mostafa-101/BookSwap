@@ -3,12 +3,7 @@ using BookSwap.Models;
 using BookSwap.Repos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using System.Linq.Expressions;
+using System.Threading.Tasks;
 
 namespace BookSwap.Controllers
 {
@@ -67,9 +62,7 @@ namespace BookSwap.Controllers
                 return Unauthorized(new { message = "Refresh token has expired." });
             }
 
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_secretKey);
-            SecurityTokenDescriptor tokenDescriptor = null;
+            string tokenString = null;
 
             switch (refreshTokenEntity.UserType)
             {
@@ -81,20 +74,13 @@ namespace BookSwap.Controllers
                     {
                         return Unauthorized(new { message = "Admin not found." });
                     }
-                    tokenDescriptor = new SecurityTokenDescriptor
-                    {
-                        Subject = new ClaimsIdentity(new[]
-                        {
-                            new Claim("name", admin.AdminName),
-                            new Claim("role", "Admin")
-                        }),
-                        Expires = DateTime.UtcNow.AddHours(1),
-                        SigningCredentials = new SigningCredentials(
-                            new SymmetricSecurityKey(key),
-                            SecurityAlgorithms.HmacSha256Signature),
-                        Issuer = _issuer,
-                        Audience = _Audience
-                    };
+                    tokenString = PasswordService.GenerateJwtToken(
+                        _secretKey,
+                        _issuer,
+                        _Audience,
+                        admin.AdminName,
+                        "Admin"
+                    );
                     break;
 
                 case "BookOwner":
@@ -102,7 +88,7 @@ namespace BookSwap.Controllers
                     {
                         return Unauthorized(new { message = "BookOwner ID is missing." });
                     }
-                    var bookOwner =  _bookOwnerRepo.getById(refreshTokenEntity.BookOwnerId.Value);
+                    var bookOwner = _bookOwnerRepo.getById(refreshTokenEntity.BookOwnerId.Value);
                     if (bookOwner == null)
                     {
                         return Unauthorized(new { message = "BookOwner not found." });
@@ -111,21 +97,15 @@ namespace BookSwap.Controllers
                     {
                         return StatusCode(StatusCodes.Status403Forbidden, new { message = "Your account is not approved." });
                     }
-                    tokenDescriptor = new SecurityTokenDescriptor
-                    {
-                        Subject = new ClaimsIdentity(new[]
-                        {
-                            new Claim("name", bookOwner.BookOwnerName),
-                            new Claim("role", "BookOwner"),
-                            new Claim("bookOwnerId", bookOwner.BookOwnerID.ToString())
-                        }),
-                        Expires = DateTime.UtcNow.AddHours(2),
-                        SigningCredentials = new SigningCredentials(
-                            new SymmetricSecurityKey(key),
-                            SecurityAlgorithms.HmacSha256Signature),
-                        Issuer = _issuer,
-                        Audience = _Audience
-                    };
+                    tokenString = PasswordService.GenerateJwtToken(
+                        _secretKey,
+                        _issuer,
+                        _Audience,
+                        bookOwner.BookOwnerName,
+                        "BookOwner",
+                        bookOwner.BookOwnerID.ToString()
+
+                    );
                     break;
 
                 case "Reader":
@@ -133,34 +113,25 @@ namespace BookSwap.Controllers
                     {
                         return Unauthorized(new { message = "Reader ID is missing." });
                     }
-                    var reader =  _readerRepo.getById(refreshTokenEntity.ReaderId.Value);
+                    var reader = _readerRepo.getById(refreshTokenEntity.ReaderId.Value);
                     if (reader == null)
                     {
                         return Unauthorized(new { message = "Reader not found." });
                     }
-                    tokenDescriptor = new SecurityTokenDescriptor
-                    {
-                        Subject = new ClaimsIdentity(new[]
-                        {
-                            new Claim("name", reader.ReaderName),
-                            new Claim("role", "Reader"),
-                            new Claim("readerId", reader.ReaderID.ToString())
-                        }),
-                        Expires = DateTime.UtcNow.AddHours(2),
-                        SigningCredentials = new SigningCredentials(
-                            new SymmetricSecurityKey(key),
-                            SecurityAlgorithms.HmacSha256Signature),
-                        Issuer = _issuer,
-                        Audience = _Audience
-                    };
+                    tokenString = PasswordService.GenerateJwtToken(
+                        _secretKey,
+                        _issuer,
+                        _Audience,
+                        reader.ReaderName,
+                        "Reader",
+                        reader.ReaderID.ToString()
+                     
+                    );
                     break;
 
                 default:
                     return BadRequest(new { message = "Invalid user type." });
             }
-
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
 
             var newRefreshToken = PasswordService.GenerateRefreshToken();
             var newRefreshTokenEntity = new RefreshToken
