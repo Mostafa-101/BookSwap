@@ -52,7 +52,6 @@ namespace BookSwap.Controllers
             _refreshTokenRepo = refreshTokenRepo;
         }
 
-        // Helper method to verify readerId from JWT
         private IActionResult VerifyReaderId(int readerId)
         {
             var jwtReaderId = User.FindFirst("readerId")?.Value;
@@ -60,7 +59,7 @@ namespace BookSwap.Controllers
             {
                 return Unauthorized(new { message = "You are not authorized to access this resource" });
             }
-            return null; // Indicates verification passed
+            return null; 
         }
 
         [AllowAnonymous]
@@ -140,13 +139,12 @@ namespace BookSwap.Controllers
                 }
             });
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
         [Authorize(Roles = "Reader")]
         [HttpPut("UpdateReader/{id}")]
         public IActionResult UpdateReader(int id, [FromBody] UpdateReaderDTO updatedReader)
         {
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(id);
             if (verificationResult != null)
                 return verificationResult;
@@ -167,7 +165,6 @@ namespace BookSwap.Controllers
 
             return Ok("Reader updated successfully.");
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPost("borrow")]
         [Authorize(Roles = "Reader")]
@@ -176,7 +173,6 @@ namespace BookSwap.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(requestDto.ReaderID);
             if (verificationResult != null)
                 return verificationResult;
@@ -219,8 +215,8 @@ namespace BookSwap.Controllers
                 return StatusCode(500, new { message = "Error processing borrow request", error = ex.Message });
             }
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
         [HttpPost("return")]
         [Authorize(Roles = "Reader")]
         public async Task<ActionResult<BookRequestResponseDTO>> ReturnBook([FromBody] BookRequestResponseDTO requestDto)
@@ -228,10 +224,8 @@ namespace BookSwap.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(requestDto.ReaderID);
             if (verificationResult != null)
-                // return verificationResult;
                 return Unauthorized(new { message = "You are not authorized to access this resource" });
 
             var bookRequest = (await _bookRequestRepo.getAllFilterAsync(
@@ -274,16 +268,14 @@ namespace BookSwap.Controllers
                 return StatusCode(500, new { message = "Error updating the database", error = ex.Message });
             }
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
         [HttpGet("user/{readerId}")]
         [Authorize(Roles = "Reader")]
         public async Task<ActionResult<IEnumerable<BookRequestWithTitleResponseDTO>>> GetBookRequestsForUser(int readerId)
         {
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(readerId);
             if (verificationResult != null)
-                //  return verificationResult;
               return Unauthorized(new { message = "You are not authorized to access this resource" });
 
             var readerExists = (await _readerRepo.getAllFilterAsync(r => r.ReaderID == readerId)).Any();
@@ -309,13 +301,12 @@ namespace BookSwap.Controllers
 
             return Ok(bookRequestDtos);
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
         [HttpPost("like")]
         [Authorize(Roles = "Reader")]
         public async Task<IActionResult> LikeOrDislikeBook([FromBody] LikeDTO DTO)
         {
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(DTO.ReaderID);
             if (verificationResult != null)
                 return verificationResult;
@@ -337,12 +328,12 @@ namespace BookSwap.Controllers
 
             return Ok(like.IsLike ? "Book liked successfully." : "Book disliked successfully.");
         }
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 
         [HttpGet("check-like")]
         [Authorize(Roles = "Reader")]
         public async Task<IActionResult> CheckLikeStatus([FromQuery] int readerId, [FromQuery] int bookPostId)
         {
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(readerId);
             if (verificationResult != null)
                 return verificationResult;
@@ -364,13 +355,11 @@ namespace BookSwap.Controllers
                 IsLike = like.IsLike,
             });
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         [HttpPut("like")]
         [Authorize(Roles = "Reader")]
         public async Task<IActionResult> ToggleReaction([FromBody] LikeDTO DTO)
         {
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(DTO.ReaderID);
             if (verificationResult != null)
                 return verificationResult;
@@ -390,13 +379,13 @@ namespace BookSwap.Controllers
 
             return Ok(reaction.IsLike ? "Changed to like successfully." : "Changed to dislike successfully.");
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
         [HttpDelete("like")]
         [Authorize(Roles = "Reader")]
+
         public async Task<IActionResult> DeleteReaction([FromBody] LikeDTO DTO)
         {
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(DTO.ReaderID);
             if (verificationResult != null)
                 return verificationResult;
@@ -414,13 +403,13 @@ namespace BookSwap.Controllers
 
             return Ok("Reaction deleted successfully.");
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
         [HttpPost("comment")]
         [Authorize(Roles = "Reader")]
+
         public async Task<IActionResult> CommentOnBookPost([FromBody] CommentDTO DTO)
         {
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(DTO.ReaderID);
             if (verificationResult != null)
                 return verificationResult;
@@ -442,13 +431,12 @@ namespace BookSwap.Controllers
 
             return Ok("Comment added successfully.");
         }
-
         [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
         [HttpPost("reply")]
         [Authorize(Roles = "Reader")]
         public async Task<IActionResult> ReplyOnComment([FromBody] ReplyDTO DTO)
         {
-            // Verify readerId from JWT
             var verificationResult = VerifyReaderId(DTO.ReaderID);
             if (verificationResult != null)
                 return verificationResult;

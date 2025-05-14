@@ -1,0 +1,50 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>SignalR Notification Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/6.0.1/signalr.min.js"></script>
+</head>
+<body>
+    <h1>SignalR Notification Test</h1>
+    <div id="notification"></div>
+    <button onclick="testNotification()">Test Notification</button>
+
+    <script>
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("https://localhost:7200/notificationHub", {
+                accessTokenFactory: () => "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoieXkiLCJyb2xlIjoiUmVhZGVyIiwicmVhZGVySWQiOiIyIiwibmJmIjoxNzQ3MjQ5OTY3LCJleHAiOjE3NDcyNTM1NjcsImlhdCI6MTc0NzI0OTk2NywiaXNzIjoiQm9va1N3YXAiLCJhdWQiOiJCb29rU3dhcFVzZXJzIn0.PigBosI0YgkbqefSJNO1VbhAHbehBNh7GseLrW-ClMQ",
+                transport: signalR.HttpTransportType.WebSockets
+            })
+            .configureLogging(signalR.LogLevel.Debug)
+            .build();
+
+        connection.on("ReceiveNotification", (message) => {
+            console.log("Notification received:", message);
+            const notificationDiv = document.getElementById("notification");
+            notificationDiv.innerHTML += `<p>${message}</p>`;
+        });
+
+        async function start() {
+            try {
+                await connection.start();
+                console.log("SignalR Connected.");
+            } catch (err) {
+                console.error("Connection failed:", err.message);
+                setTimeout(start, 5000);
+            }
+        }
+
+        connection.onclose(async (error) => {
+            console.error("Connection closed:", error);
+            await start();
+        });
+
+        function testNotification() {
+            const notificationDiv = document.getElementById("notification");
+            notificationDiv.innerHTML += "<p>Test message</p>";
+        }
+
+        start();
+    </script>
+</body>
+</html>

@@ -6,6 +6,7 @@ using BookSwap.Repos;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Security.Claims;
@@ -23,14 +24,15 @@ public class BookOwnerController : ControllerBase
     private readonly GenericRepo<BookOwner> _BookOwnerRepo;
     private readonly GenericRepo<BookRequest> _bookRequestRepo;
     private readonly GenericRepo<RefreshToken> _refreshTokenRepo;
-
+    private readonly IHubContext<NotificationHub> _hubContext;
     public BookOwnerController(
         BookSwapDbContext context,
         IConfiguration configuration,
         GenericRepo<BookPost> bookPostRepo,
         GenericRepo<BookOwner> BookOwnerRepo,
         GenericRepo<BookRequest> bookRequestRepo,
-        GenericRepo<RefreshToken> refreshTokenRepo)
+        GenericRepo<RefreshToken> refreshTokenRepo,
+      IHubContext<NotificationHub> hubContext)
     {
         _context = context;
         _secretKey = configuration["Jwt:Key"];
@@ -40,9 +42,9 @@ public class BookOwnerController : ControllerBase
         _BookOwnerRepo = BookOwnerRepo;
         _bookRequestRepo = bookRequestRepo;
         _refreshTokenRepo = refreshTokenRepo;
+        _hubContext = hubContext;
     }
 
-    // Helper method to verify bookOwnerId from JWT
     private IActionResult VerifyBookOwnerId(int bookOwnerId)
     {
         var jwtBookOwnerId = User.FindFirst("bookOwnerId")?.Value;
@@ -50,7 +52,7 @@ public class BookOwnerController : ControllerBase
         {
             return Unauthorized(new { message = "You are not authorized to access this resource" });
         }
-        return null; // Indicates verification passed
+        return null; 
     }
 
     [AllowAnonymous]
@@ -77,6 +79,7 @@ public class BookOwnerController : ControllerBase
 
         return Ok("BookOwner registered. Waiting for admin approval.");
     }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 
     [AllowAnonymous]
     [HttpPost("login")]
@@ -141,23 +144,20 @@ public class BookOwnerController : ControllerBase
             }
         });
     }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 
     [HttpPost]
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> CreateBookPost([FromForm] BookPostDTO dto)
     {
-        // Verify bookOwnerId from JWT
         var verificationResult = VerifyBookOwnerId(dto.BookOwnerID);
         if (verificationResult != null)
             return verificationResult;
 
-        // Verify book owner exists
         var bookOwner = _BookOwnerRepo.getById(dto.BookOwnerID);
         if (bookOwner == null)
             return NotFound(new { message = "Book owner not found" });
 
-        // Convert CoverPhoto to byte array
         using var stream = new MemoryStream();
         await dto.CoverPhoto.CopyToAsync(stream);
 
@@ -183,8 +183,8 @@ public class BookOwnerController : ControllerBase
 
         return Ok(new { message = "Book post created successfully!" });
     }
-
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteBookPost(int id)
     {
@@ -192,7 +192,6 @@ public class BookOwnerController : ControllerBase
         if (post == null)
             return NotFound($"No BookPost found with ID = {id}");
 
-        // Verify bookOwnerId from JWT
         var verificationResult = VerifyBookOwnerId(post.BookOwnerID);
         if (verificationResult != null)
             return verificationResult;
@@ -206,9 +205,9 @@ public class BookOwnerController : ControllerBase
 
         return Ok($"BookPost with ID = {id} deleted successfully.");
     }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 
     [HttpPut("UpdateBookPost/{id}")]
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> UpdateBookPost(int id, [FromForm] BookPostDTO dto)
     {
@@ -216,7 +215,6 @@ public class BookOwnerController : ControllerBase
         if (post == null)
             return NotFound($"BookPost with ID = {id} not found.");
 
-        // Verify bookOwnerId from JWT
         var verificationResult = VerifyBookOwnerId(post.BookOwnerID);
         if (verificationResult != null)
             return verificationResult;
@@ -241,13 +239,12 @@ public class BookOwnerController : ControllerBase
 
         return Ok($"BookPost with ID = {id} updated successfully.");
     }
-
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [Authorize(Roles = "BookOwner")]
     [HttpPut("UpdateBookOwner/{id}")]
     public async Task<IActionResult> UpdateBookOwner(int id, [FromBody] UpdateBookOwnerDTO updatedOwner)
     {
-        // Verify bookOwnerId from JWT
         var verificationResult = VerifyBookOwnerId(id);
         if (verificationResult != null)
             return verificationResult;
@@ -276,8 +273,6 @@ public class BookOwnerController : ControllerBase
 
         return Ok("BookOwner updated successfully.");
     }
-
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpPost("respond")]
     [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> RespondToBookRequest([FromBody] BookRequestResponseDTO responseDto)
@@ -294,7 +289,6 @@ public class BookOwnerController : ControllerBase
         if (bookRequest == null)
             return NotFound(new { message = "Book request not found" });
 
-        // Verify bookOwnerId from JWT
         var verificationResult = VerifyBookOwnerId(bookRequest.BookPost.BookOwnerID);
         if (verificationResult != null)
             return verificationResult;
@@ -318,12 +312,18 @@ public class BookOwnerController : ControllerBase
             bool postUpdated = _bookPostRepo.update(bookRequest.BookPost);
 
             if (requestUpdated && postUpdated)
+            {
+                var notificationMessage = $"Your book request for '{bookRequest.BookPost.Title}' has been {responseDto.RequsetStatus.ToLower()}.";
+                await _hubContext.Clients.User(bookRequest.ReaderID.ToString())
+                    .SendAsync("ReceiveNotification", notificationMessage);
+
                 return Ok(new
                 {
                     message = $"Book request {responseDto.RequsetStatus.ToLower()} successfully",
                     requestId = bookRequest.RequsetID,
                     bookPostId = bookRequest.BookPostID
                 });
+            }
             else
                 return StatusCode(500, new { message = "Error updating request or post" });
         }
@@ -332,6 +332,7 @@ public class BookOwnerController : ControllerBase
             return StatusCode(500, new { message = "Error processing request response", error = ex.Message });
         }
     }
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
 
     [HttpGet("owner/")]
     [Authorize(Roles = "BookOwner")]
@@ -370,13 +371,12 @@ public class BookOwnerController : ControllerBase
             requests = bookRequestDtos
         });
     }
-
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [HttpGet("posts/{bookOwnerId}")]
     [Authorize(Roles = "BookOwner")]
     public async Task<IActionResult> GetAllPostsForOwner(int bookOwnerId)
     {
-        // Verify bookOwnerId from JWT
         var verificationResult = VerifyBookOwnerId(bookOwnerId);
         if (verificationResult != null)
             return verificationResult;

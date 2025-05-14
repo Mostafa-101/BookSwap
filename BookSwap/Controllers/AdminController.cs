@@ -46,7 +46,6 @@ public class AdminController : ControllerBase
     }
 
 
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [Authorize(Roles = "Admin")]
     [HttpPost("create")]
     public async Task<IActionResult> CreateAdmin([FromBody] AdminDTO DTO)
@@ -73,7 +72,7 @@ public class AdminController : ControllerBase
         return Ok("Admin registered successfully.");
     }
 
-[AllowAnonymous]
+        [AllowAnonymous]
         [HttpPost("admin/login")]
         public async Task<IActionResult> Login([FromBody] AdminDTO DTO)
         {
@@ -135,8 +134,8 @@ public class AdminController : ControllerBase
             });
         }
 
-
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [Authorize(Roles = "Admin")]
     [HttpGet("ManageBookOwners")]
     public async Task<ActionResult<IEnumerable<BookOwnerDTOResponse>>> GetPendingBookOwners()
@@ -157,8 +156,8 @@ public class AdminController : ControllerBase
 
         return Ok(response);
     }
-
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [Authorize(Roles = "Admin")]
     [HttpPut("ProcessBookOwner/{id}")]
     public async Task<IActionResult> ProcessBookOwner(int id, [FromQuery] string action)
@@ -191,8 +190,8 @@ public class AdminController : ControllerBase
 
         return Ok($"Book Owner {action}d.");
     }
-
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [Authorize(Roles = "Admin")]
     [HttpGet("ManageBookPosts")]
     public async Task<ActionResult<IEnumerable<BookPostResponseDto>>> GetPendingBookPosts()
@@ -223,8 +222,8 @@ public class AdminController : ControllerBase
 
         return Ok(response);
     }
-
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+
     [Authorize(Roles = "Admin")]
     [HttpPut("ProcessBookPosts/{id}")]
     public async Task<IActionResult> ProcessBookPosts(int id, [FromQuery] string action)
